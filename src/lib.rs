@@ -1,5 +1,4 @@
 #[macro_use] extern crate error_chain;
-extern crate libc;
 extern crate bytes;
 extern crate futures;
 extern crate tokio_io;
@@ -7,27 +6,27 @@ extern crate tokio_core;
 extern crate hyper;
 
 #[macro_use] mod utils;
-pub mod aio;
+pub mod error;
 
 use std::io;
 use std::fs::File;
-use std::path::Path;
-use futures::Stream;
+use futures::{ Future, Stream };
 use futures::future::{ self, FutureResult };
 use tokio_core::reactor::Handle;
-use hyper::{ Get, Post, StatusCode };
+use hyper::{ Get, Post, StatusCode, Body };
 use hyper::header::ContentLength;
 use hyper::server::{ Service, Request, Response };
 use utils::path_canonicalize;
-use aio::AioReadBuf;
 
 
 #[derive(Debug, Clone)]
-pub struct Httpd;
+pub struct Httpd {
+    handle: Handle
+}
 
 impl Service for Httpd {
     type Request = Request;
-    type Response = Response<AioReadBuf>;
+    type Response = Response;
     type Error = hyper::Error;
     type Future = FutureResult<Self::Response, Self::Error>;
 
@@ -37,25 +36,22 @@ impl Service for Httpd {
         match target_path.metadata() {
             Ok(metadata) => if let Ok(dir) = target_path.read_dir() {
                 unimplemented!()
-            } else if let Ok(fd) = File::open(&target_path) {
-                let res = Response::new()
-                    .with_header(ContentLength(metadata.len()))
-                    .with_body(AioReadBuf::new(fd, 0..metadata.len() as usize));
-                future::ok(res)
+            } else if let Ok(_fd) = File::open(&target_path) {
+                unimplemented!()
             } else {
                 unimplemented!()
             },
             Err(err) => match err.kind() {
                 io::ErrorKind::NotFound => {
-                    /* TODO 404 */
+                    // TODO 404
                     unimplemented!()
                 },
                 io::ErrorKind::PermissionDenied => {
-                    /* TODO 403 */
+                    // TODO 403
                     unimplemented!()
                 },
                 _ => {
-                    /* TODO 500 */
+                    // TODO 500
                     unimplemented!()
                 }
             }
@@ -64,7 +60,9 @@ impl Service for Httpd {
 }
 
 impl Httpd {
-    pub fn new() -> Self {
-        Httpd
+    pub fn new(handle: &Handle) -> Self {
+        Httpd {
+            handle: handle.clone()
+        }
     }
 }

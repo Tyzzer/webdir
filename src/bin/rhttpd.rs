@@ -4,6 +4,7 @@ extern crate hyper;
 extern crate rhttpd;
 
 use std::io;
+use std::time::Duration;
 use std::net::SocketAddr;
 use futures::Stream;
 use tokio_core::reactor::Core;
@@ -23,7 +24,7 @@ fn start(addr: &SocketAddr) -> io::Result<()> {
         .for_each(|(stream, addr)| {
             Http::new().bind_connection(
                 &handle, stream, addr,
-                Httpd::new()
+                Httpd::new(&handle)
             );
 
             Ok(())
