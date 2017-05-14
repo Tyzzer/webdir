@@ -23,10 +23,10 @@ macro_rules! err {
 }
 
 
-pub fn path_canonicalize<P: AsRef<Path>>(path: P) -> PathBuf {
+pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> PathBuf {
     path.as_ref()
         .components()
-        .fold(PathBuf::new(), |mut sum, next| {
+        .fold(root.to_path_buf(), |mut sum, next| {
             match next {
                 Component::Normal(p) => sum.push(p),
                 Component::ParentDir => { sum.pop(); },

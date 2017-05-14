@@ -2,32 +2,34 @@
 #![plugin(maud_macros)]
 
 #[macro_use] extern crate error_chain;
+extern crate url;
 extern crate bytes;
 extern crate futures;
 extern crate tokio_io;
 extern crate tokio_core;
 extern crate hyper;
 extern crate maud;
+extern crate chrono;
 
 #[macro_use] mod utils;
 pub mod error;
 mod pages;
 
-use std::io;
+use std::{ io, env };
+use std::path::PathBuf;
+use std::sync::Arc;
 use futures::{ Future, Stream };
 use futures::future::{ self, FutureResult };
 use tokio_core::reactor::Handle;
-use hyper::{ Get, Post, StatusCode, Body };
-use hyper::header::ContentLength;
+use hyper::{ Get, StatusCode };
 use hyper::server::{ Service, Request, Response };
 
 
 #[derive(Debug, Clone)]
 pub struct Httpd {
-    handle: Handle,
-    debug_flag: bool
+    pub handle: Handle,
+    pub root: Arc<PathBuf>
 }
-
 
 impl Service for Httpd {
     type Request = Request;
@@ -37,31 +39,29 @@ impl Service for Httpd {
 
     fn call(&self, req: Request) -> Self::Future {
         match pages::process(self, &req) {
-            Ok(_) => unimplemented!(),
+            Ok(res) => future::ok(res),
             Err(err) => future::ok(match err.kind() {
                 io::ErrorKind::NotFound =>
                     pages::fail(StatusCode::NotFound, None),
                 io::ErrorKind::PermissionDenied =>
                     pages::fail(StatusCode::Forbidden, None),
-                _ => pages::fail(
-                    StatusCode::InternalServerError,
-                    if self.debug_flag { Some(err) } else { None }
-                )
+                _ =>
+                    pages::fail(StatusCode::InternalServerError, Some(err))
             })
         }
     }
 }
 
 impl Httpd {
-    pub fn new(handle: &Handle) -> Self {
-        Httpd {
+    pub fn new(handle: &Handle) -> io::Result<Self> {
+        Ok(Httpd {
             handle: handle.clone(),
-            debug_flag: true
-        }
+            root: Arc::new(env::current_dir()?)
+        })
     }
 
-    pub fn with_debug_flag(mut self, debug_flag: bool) -> Self {
-        self.debug_flag = debug_flag;
+    pub fn with_root_path<P: Into<PathBuf>>(mut self, path: P) -> Self {
+        self.root = Arc::new(path.into());
         self
     }
 }

@@ -19,8 +19,10 @@ futures = "*"
 futures-cpupool = "*"
 tokio-io = "*"
 tokio-core = "*"
-
 hyper = { git = "https://github.com/hyperium/hyper.git" }
+
+url = "*"
+chrono = "*"
 mime_guess = "*"
 maud = "*"
 maud_macros = "*"

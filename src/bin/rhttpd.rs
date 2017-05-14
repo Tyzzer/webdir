@@ -4,7 +4,6 @@ extern crate hyper;
 extern crate rhttpd;
 
 use std::io;
-use std::time::Duration;
 use std::net::SocketAddr;
 use futures::Stream;
 use tokio_core::reactor::Core;
@@ -18,13 +17,14 @@ use rhttpd::Httpd;
 fn start(addr: &SocketAddr) -> io::Result<()> {
     let mut core = Core::new()?;
     let handle = core.handle();
+    let httpd = Httpd::new(&handle)?;
 
     let done = TcpListener::bind(addr, &handle)?
         .incoming()
         .for_each(|(stream, addr)| {
             Http::new().bind_connection(
                 &handle, stream, addr,
-                Httpd::new(&handle)
+                httpd.clone()
             );
 
             Ok(())
