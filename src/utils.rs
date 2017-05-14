@@ -23,34 +23,53 @@ macro_rules! err {
 }
 
 
-pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> PathBuf {
+pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {
     path.as_ref()
         .components()
-        .fold(root.to_path_buf(), |mut sum, next| {
+        .fold((0, root.to_path_buf()), |(mut depth, mut sum), next| {
             match next {
-                Component::Normal(p) => sum.push(p),
-                Component::ParentDir => { sum.pop(); },
+                Component::Normal(p) => {
+                    sum.push(p);
+                    depth += 1;
+                },
+                Component::ParentDir => {
+                    if sum.pop() {
+                        depth -= 1;
+                    }
+                },
                 _ => ()
             };
-            sum
+            (depth, sum)
         })
 }
 
 
 #[test]
 fn test_path_canonicalize() {
+    let root = Path::new("/");
+
     assert_eq!(
-        path_canonicalize("../../../aaa.txt"),
-        Path::new("aaa.txt")
+        path_canonicalize(&root, "../../../aaa.txt"),
+        (1, PathBuf::from("/aaa.txt"))
     );
 
     assert_eq!(
-        path_canonicalize("/aa/../../../aaa.txt"),
-        Path::new("aaa.txt")
+        path_canonicalize(&root, "/aa/../../../aaa.txt"),
+        (1, PathBuf::from("/aaa.txt"))
     );
 
     assert_eq!(
-        path_canonicalize("aaa/bbb/ccc/../../ddd/aaa.txt"),
-        Path::new("aaa/ddd/aaa.txt")
+        path_canonicalize(&root, "/aa/../../../"),
+        (0, PathBuf::from("/"))
+    );
+
+    assert_eq!(
+        path_canonicalize(&root, "aaa/bbb/ccc/../../ddd/"),
+        (2, PathBuf::from("/aaa/ddd/"))
+    );
+
+    assert_eq!(
+        path_canonicalize(&root, "aaa/bbb/ccc/../../ddd/aaa.txt"),
+        (3, PathBuf::from("/aaa/ddd/aaa.txt"))
     );
 }

@@ -10,9 +10,11 @@ extern crate tokio_core;
 extern crate hyper;
 extern crate maud;
 extern crate chrono;
+extern crate humansize;
 
 #[macro_use] mod utils;
 pub mod error;
+mod render;
 mod pages;
 
 use std::{ io, env };
