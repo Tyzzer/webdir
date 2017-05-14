@@ -20,10 +20,9 @@ mod pages;
 use std::{ io, env };
 use std::path::PathBuf;
 use std::sync::Arc;
-use futures::{ Future, Stream };
 use futures::future::{ self, FutureResult };
 use tokio_core::reactor::Handle;
-use hyper::{ Get, StatusCode };
+use hyper::{ header, Get, StatusCode };
 use hyper::server::{ Service, Request, Response };
 
 
@@ -40,6 +39,13 @@ impl Service for Httpd {
     type Future = FutureResult<Self::Response, Self::Error>;
 
     fn call(&self, req: Request) -> Self::Future {
+        if req.method() != &Get {
+            return future::ok(
+                pages::fail(StatusCode::MethodNotAllowed, None)
+                    .with_header(header::Allow(vec![Get]))
+            );
+        }
+
         match pages::process(self, &req) {
             Ok(res) => future::ok(res),
             Err(err) => future::ok(match err.kind() {

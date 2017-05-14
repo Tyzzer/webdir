@@ -1,11 +1,11 @@
 [package]
-name = "rhttpd"
+name = "rshttpd"
 version = "0.1.0"
 authors = ["quininer kel <quininer@live.com>"]
 
 [[bin]]
-name = "rhttpd"
-path = "src/bin/rhttpd.rs"
+name = "rshttpd"
+path = "src/bin/rshttpd.rs"
 doc = false
 
 [dependencies]

@@ -3,39 +3,46 @@ use std::ops::Add;
 use std::borrow::Cow;
 use std::time::UNIX_EPOCH;
 use std::fs::{ DirEntry, Metadata };
-use std::path::{ PathBuf, Path, StripPrefixError };
+use std::path::{ PathBuf, Path };
 use std::os::unix::ffi::OsStrExt;
 use url::percent_encoding;
-use maud::{ Render, Markup, PreEscaped };
+use maud::{ Render, Markup };
 use chrono::{ TimeZone, UTC };
 
 
 pub struct Entry {
     pub metadata: Metadata,
     pub path: PathBuf,
-    pub uri: Option<String>
+    pub uri: Option<String>,
+    pub is_symlink: bool
 }
 
 impl Entry {
     pub fn new(base: &Path, entry: DirEntry) -> io::Result<Self> {
-        let metadata = entry.metadata()?;
+        let mut metadata = entry.metadata()?;
+        let is_symlink = metadata.file_type().is_symlink();
+        if is_symlink {
+            metadata = entry.path().metadata()?;
+        }
+
         let path = entry.path();
         let uri = path.strip_prefix(base)
             .map(|p| percent_encoding::percent_encode(
                 p.as_os_str().as_bytes(),
-                percent_encoding::PATH_SEGMENT_ENCODE_SET
+                percent_encoding::DEFAULT_ENCODE_SET
             ))
-            .map(|p| p.fold(String::new(), Add::add))
+            .map(|p| p.fold(String::from("/"), Add::add))
+            .map(|p| if metadata.is_dir() { p + "/" } else { p })
             .ok();
 
-        Ok(Entry { metadata, path, uri })
+        Ok(Entry { metadata, path, uri, is_symlink })
     }
 
     pub fn name(&self) -> Cow<str> {
         self.path
             .file_name()
             .map(|p| p.to_string_lossy())
-            .unwrap_or(Cow::Borrowed(".."))
+            .unwrap_or(Cow::Borrowed("..."))
     }
 
     pub fn time(&self) -> io::Result<String> {
@@ -62,12 +69,14 @@ impl Render for Entry {
 
         html!{
             tr {
-                td class="icon" @if file_type.is_dir() {
+                td class="icon" @if self.is_symlink {
+                    "↩️"
+                } @else if file_type.is_dir() {
                     "📁"
                 } @else if file_type.is_file() {
                     "📄"
                 } @else {
-                    "↩️"
+                    "❓"
                 }
 
                 td class="link" @if let Some(ref uri) = self.uri {
@@ -95,10 +104,8 @@ impl Render for Entry {
 pub fn up(top: bool) -> Markup {
     html!{
         tr {
-            td          class="icon"    "⤴️"
-            td          class="link"    @if !top { a href=".." ".." }
-            td small    class="time"    "-"
-            td          class="size"    "-"
+            td  class="icon"    "⤴️"
+            td  class="link"    @if !top { a href=".." ".." }
         }
     }
 }

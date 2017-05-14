@@ -1,13 +1,11 @@
 use std::io;
 use std::sync::Arc;
-use std::fmt::{ self, Write };
 use std::fs::File;
 use std::os::unix::ffi::OsStringExt;
 use std::ffi::OsString;
 use url::percent_encoding;
 use futures::{ stream, Stream, Future, Sink };
-use hyper::{ StatusCode, Body, Chunk };
-use hyper::header::ContentType;
+use hyper::{ header, StatusCode, Body, Chunk };
 use hyper::server::{ Request, Response };
 use maud::Render;
 use ::utils::path_canonicalize;
@@ -31,7 +29,7 @@ pub fn process(httpd: &Httpd, req: &Request) -> io::Result<Response> {
     let path_buf = OsString::from_vec(path_buf);
     let (depth, target_path) = path_canonicalize(&httpd.root, path_buf);
     let metadata = target_path.metadata()?;
-    let mut res = Response::new();
+    let res = Response::new();
 
     if let Ok(dirs) = target_path.read_dir() {
         let (send, body) = Body::pair();
@@ -43,8 +41,10 @@ pub fn process(httpd: &Httpd, req: &Request) -> io::Result<Response> {
             )
             .map_err(error::Error::from)
             .and_then(|send| stream::iter(dirs)
-                .and_then(move |p| Entry::new(&arc_root, p))
-                .map(|m| Ok(Chunk::from(m.render().into_string())))
+                .map(move |p| Entry::new(&arc_root, p)
+                     .map(|m| Chunk::from(m.render().into_string()))
+                     .map_err(Into::into)
+                )
                 .map_err(Into::into)
                 .forward(send)
             )
@@ -58,10 +58,10 @@ pub fn process(httpd: &Httpd, req: &Request) -> io::Result<Response> {
         httpd.handle.spawn(done);
 
         Ok(res
-            .with_header(ContentType::html())
+            .with_header(header::ContentType::html())
             .with_body(body)
         )
-    } else if let Ok(fd) = File::open(&target_path) {
+    } else if let Ok(_) = File::open(&target_path) {
         unimplemented!()
     } else {
         unimplemented!()
@@ -72,7 +72,7 @@ pub fn process(httpd: &Httpd, req: &Request) -> io::Result<Response> {
 pub fn fail(status: StatusCode, err: Option<io::Error>) -> Response {
     Response::new()
         .with_status(status)
-        .with_header(ContentType::html())
+        .with_header(header::ContentType::html())
         .with_body({
             html!{
                 h1 strong "( ・_・)"

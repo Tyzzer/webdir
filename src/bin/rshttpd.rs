@@ -1,7 +1,7 @@
 extern crate futures;
 extern crate tokio_core;
 extern crate hyper;
-extern crate rhttpd;
+extern crate rshttpd;
 
 use std::io;
 use std::net::SocketAddr;
@@ -9,7 +9,7 @@ use futures::Stream;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
 use hyper::server::Http;
-use rhttpd::Httpd;
+use rshttpd::Httpd;
 
 
 
