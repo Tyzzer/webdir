@@ -61,9 +61,9 @@ pub fn process(httpd: &Httpd, req: &Request) -> io::Result<Response> {
             .with_header(header::ContentType::html())
             .with_body(body)
         )
-    } else if let Ok(_) = File::open(&target_path) {
-        unimplemented!()
     } else {
+        let _ = File::open(&target_path)?;
+
         unimplemented!()
     }
 }

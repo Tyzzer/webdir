@@ -32,7 +32,7 @@ pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBu
                     sum.push(p);
                     depth += 1;
                 },
-                Component::ParentDir => {
+                Component::ParentDir if depth > 0 =>  {
                     if sum.pop() {
                         depth -= 1;
                     }
@@ -46,30 +46,30 @@ pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBu
 
 #[test]
 fn test_path_canonicalize() {
-    let root = Path::new("/");
+    let root = Path::new("/home/");
 
     assert_eq!(
         path_canonicalize(&root, "../../../aaa.txt"),
-        (1, PathBuf::from("/aaa.txt"))
+        (1, PathBuf::from("/home/aaa.txt"))
     );
 
     assert_eq!(
         path_canonicalize(&root, "/aa/../../../aaa.txt"),
-        (1, PathBuf::from("/aaa.txt"))
+        (1, PathBuf::from("/home/aaa.txt"))
     );
 
     assert_eq!(
         path_canonicalize(&root, "/aa/../../../"),
-        (0, PathBuf::from("/"))
+        (0, PathBuf::from("/home/"))
     );
 
     assert_eq!(
         path_canonicalize(&root, "aaa/bbb/ccc/../../ddd/"),
-        (2, PathBuf::from("/aaa/ddd/"))
+        (2, PathBuf::from("/home/aaa/ddd/"))
     );
 
     assert_eq!(
         path_canonicalize(&root, "aaa/bbb/ccc/../../ddd/aaa.txt"),
-        (3, PathBuf::from("/aaa/ddd/aaa.txt"))
+        (3, PathBuf::from("/home/aaa/ddd/aaa.txt"))
     );
 }

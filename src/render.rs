@@ -20,12 +20,12 @@ pub struct Entry {
 impl Entry {
     pub fn new(base: &Path, entry: DirEntry) -> io::Result<Self> {
         let mut metadata = entry.metadata()?;
+        let path = entry.path();
         let is_symlink = metadata.file_type().is_symlink();
         if is_symlink {
-            metadata = entry.path().metadata()?;
+            metadata = path.metadata()?;
         }
 
-        let path = entry.path();
         let uri = path.strip_prefix(base)
             .map(|p| percent_encoding::percent_encode(
                 p.as_os_str().as_bytes(),
