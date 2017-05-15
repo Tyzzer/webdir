@@ -2,6 +2,7 @@
 #![plugin(maud_macros)]
 
 #[macro_use] extern crate error_chain;
+#[macro_use] extern crate slog;
 extern crate url;
 extern crate bytes;
 extern crate futures;
@@ -26,12 +27,14 @@ use futures::future::{ self, FutureResult };
 use tokio_core::reactor::Handle;
 use hyper::{ header, Get, StatusCode };
 use hyper::server::{ Service, Request, Response };
+use slog::Logger;
 
 
 #[derive(Debug, Clone)]
 pub struct Httpd {
     pub handle: Handle,
-    pub root: Arc<PathBuf>
+    pub root: Arc<PathBuf>,
+    pub log: Logger
 }
 
 impl Service for Httpd {
@@ -41,32 +44,41 @@ impl Service for Httpd {
     type Future = FutureResult<Self::Response, Self::Error>;
 
     fn call(&self, req: Request) -> Self::Future {
+        let log = self.log.new(o!("addr" => format!("{:?}", req.remote_addr())));
+
+        info!(log, "request";
+            "path" => req.path(),
+            "method" => format_args!("{}", req.method())
+        );
+
         if req.method() != &Get {
             return future::ok(
-                pages::fail(StatusCode::MethodNotAllowed, None)
+                pages::fail(&log, StatusCode::MethodNotAllowed, err!(Other))
                     .with_header(header::Allow(vec![Get]))
             );
         }
 
-        match pages::process(self, &req) {
+        match pages::process(self, &log, &req) {
             Ok(res) => future::ok(res),
-            Err(err) => future::ok(match err.kind() {
-                io::ErrorKind::NotFound =>
-                    pages::fail(StatusCode::NotFound, None),
-                io::ErrorKind::PermissionDenied =>
-                    pages::fail(StatusCode::Forbidden, None),
-                _ =>
-                    pages::fail(StatusCode::InternalServerError, Some(err))
-            })
+            Err(err) => future::ok(pages::fail(
+                &log,
+                match err.kind() {
+                    io::ErrorKind::NotFound => StatusCode::NotFound,
+                    io::ErrorKind::PermissionDenied => StatusCode::Forbidden,
+                    _ => StatusCode::InternalServerError
+                },
+                err
+            ))
         }
     }
 }
 
 impl Httpd {
-    pub fn new(handle: &Handle) -> io::Result<Self> {
+    pub fn new(handle: Handle, log: Logger) -> io::Result<Self> {
         Ok(Httpd {
-            handle: handle.clone(),
-            root: Arc::new(env::current_dir()?)
+            handle: handle,
+            root: Arc::new(env::current_dir()?),
+            log
         })
     }
 
