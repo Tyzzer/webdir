@@ -21,8 +21,8 @@ mod render;
 mod pages;
 
 use std::{ io, env };
-use std::path::PathBuf;
 use std::sync::Arc;
+use std::path::{ Path, PathBuf };
 use futures::future::{ self, FutureResult };
 use tokio_core::reactor::Handle;
 use hyper::{ header, Get, Head, StatusCode };
@@ -83,8 +83,8 @@ impl Httpd {
         })
     }
 
-    pub fn with_root_path<P: Into<PathBuf>>(mut self, path: P) -> Self {
-        self.root = Arc::new(path.into());
-        self
+    pub fn set_root<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
+        self.root = Arc::new(path.as_ref().canonicalize()?);
+        Ok(())
     }
 }

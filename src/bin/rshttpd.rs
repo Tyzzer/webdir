@@ -26,7 +26,9 @@ use rshttpd::Httpd;
 #[structopt(name = "rshttpd", about = "A simple satic webserver")]
 struct Config {
     #[structopt(long = "bind", help = "specify bind address", default_value = "127.0.0.1:0")]
-    addr: SocketAddr
+    addr: SocketAddr,
+    #[structopt(long = "root", help = "specify root path")]
+    root: Option<String>
 }
 
 
@@ -39,10 +41,17 @@ fn start(config: Config) -> io::Result<()> {
 
     let mut core = Core::new()?;
     let handle = core.handle();
-    let httpd = Httpd::new(handle.clone(), log.clone())?;
     let listener = TcpListener::bind(&config.addr, &handle)?;
+    let mut httpd = Httpd::new(handle.clone(), log.clone())?;
 
-    info!(log, "listening"; "addr" => format_args!("{}", listener.local_addr()?));
+    if let Some(p) = config.root {
+        httpd.set_root(p)?;
+    }
+
+    info!(log, "listening";
+        "addr" => format_args!("{}", listener.local_addr()?),
+        "root" => format_args!("{}", httpd.root.display())
+    );
 
     let done = listener.incoming()
         .for_each(|(stream, addr)| {
