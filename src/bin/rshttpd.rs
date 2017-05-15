@@ -1,6 +1,8 @@
 #[macro_use] extern crate slog;
 extern crate slog_term;
 extern crate slog_async;
+#[macro_use] extern crate structopt_derive;
+extern crate structopt;
 extern crate futures;
 extern crate tokio_core;
 extern crate hyper;
@@ -12,6 +14,7 @@ use std::net::SocketAddr;
 use slog::{ Drain, Logger };
 use slog_term::{ CompactFormat, TermDecorator };
 use slog_async::Async;
+use structopt::StructOpt;
 use futures::Stream;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
@@ -19,9 +22,16 @@ use hyper::server::Http;
 use rshttpd::Httpd;
 
 
+#[derive(StructOpt)]
+#[structopt(name = "rshttpd", about = "A simple satic webserver")]
+struct Config {
+    #[structopt(long = "bind", help = "specify bind address", default_value = "127.0.0.1:0")]
+    addr: SocketAddr
+}
+
 
 #[inline]
-fn start(addr: &SocketAddr) -> io::Result<()> {
+fn start(config: Config) -> io::Result<()> {
     let decorator = TermDecorator::new().build();
     let drain = CompactFormat::new(decorator).build().fuse();
     let drain = Async::new(drain).build().fuse();
@@ -30,7 +40,7 @@ fn start(addr: &SocketAddr) -> io::Result<()> {
     let mut core = Core::new()?;
     let handle = core.handle();
     let httpd = Httpd::new(handle.clone(), log.clone())?;
-    let listener = TcpListener::bind(addr, &handle)?;
+    let listener = TcpListener::bind(&config.addr, &handle)?;
 
     info!(log, "listening"; "addr" => format_args!("{}", listener.local_addr()?));
 
@@ -44,13 +54,10 @@ fn start(addr: &SocketAddr) -> io::Result<()> {
             Ok(())
         });
 
-    core.run(done)?;
-
-    Ok(())
+    core.run(done)
 }
 
 
 fn main() {
-    let addr = "127.0.0.1:1337".parse().unwrap();
-    start(&addr).unwrap();
+    start(Config::from_args()).unwrap();
 }

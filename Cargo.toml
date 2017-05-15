@@ -9,7 +9,6 @@ path = "src/bin/rshttpd.rs"
 doc = false
 
 [dependencies]
-clap = "*"
 structopt = "*"
 structopt-derive = "*"
 error-chain = "*"
