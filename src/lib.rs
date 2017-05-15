@@ -25,7 +25,7 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use futures::future::{ self, FutureResult };
 use tokio_core::reactor::Handle;
-use hyper::{ header, Get, StatusCode };
+use hyper::{ header, Get, Head, StatusCode };
 use hyper::server::{ Service, Request, Response };
 use slog::Logger;
 
@@ -51,9 +51,9 @@ impl Service for Httpd {
             "method" => format_args!("{}", req.method())
         );
 
-        if req.method() != &Get {
+        if ![Get, Head].contains(req.method()) {
             return future::ok(
-                pages::fail(&log, StatusCode::MethodNotAllowed, err!(Other))
+                pages::fail(&log, false, StatusCode::MethodNotAllowed, &err!(Other))
                     .with_header(header::Allow(vec![Get]))
             );
         }
@@ -62,12 +62,13 @@ impl Service for Httpd {
             Ok(res) => future::ok(res),
             Err(err) => future::ok(pages::fail(
                 &log,
+                req.method() == &Head,
                 match err.kind() {
                     io::ErrorKind::NotFound => StatusCode::NotFound,
                     io::ErrorKind::PermissionDenied => StatusCode::Forbidden,
                     _ => StatusCode::InternalServerError
                 },
-                err
+                &err
             ))
         }
     }
