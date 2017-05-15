@@ -1,9 +1,8 @@
 use std::io;
 use std::ops::Add;
-use std::borrow::Cow;
+use std::path::Path;
 use std::time::UNIX_EPOCH;
 use std::fs::{ DirEntry, Metadata };
-use std::path::{ PathBuf, Path };
 use std::os::unix::ffi::OsStrExt;
 use url::percent_encoding;
 use maud::{ Render, Markup };
@@ -12,7 +11,7 @@ use chrono::{ TimeZone, UTC };
 
 pub struct Entry {
     pub metadata: Metadata,
-    pub path: PathBuf,
+    pub name: String,
     pub uri: Option<String>,
     pub is_symlink: bool
 }
@@ -21,6 +20,7 @@ impl Entry {
     pub fn new(base: &Path, entry: DirEntry) -> io::Result<Self> {
         let mut metadata = entry.metadata()?;
         let path = entry.path();
+        let name = entry.file_name().to_string_lossy().into();
         let is_symlink = metadata.file_type().is_symlink();
         if is_symlink {
             metadata = path.metadata()?;
@@ -35,14 +35,7 @@ impl Entry {
             .map(|p| if metadata.is_dir() { p + "/" } else { p })
             .ok();
 
-        Ok(Entry { metadata, path, uri, is_symlink })
-    }
-
-    pub fn name(&self) -> Cow<str> {
-        self.path
-            .file_name()
-            .map(|p| p.to_string_lossy())
-            .unwrap_or(Cow::Borrowed("..."))
+        Ok(Entry { metadata, name, uri, is_symlink })
     }
 
     pub fn time(&self) -> io::Result<String> {
@@ -71,18 +64,18 @@ impl Render for Entry {
             tr {
                 td class="icon" @if self.is_symlink {
                     "↩️"
-                } @else if file_type.is_dir() {
-                    "📁"
                 } @else if file_type.is_file() {
                     "📄"
+                } @else if file_type.is_dir() {
+                    "📁"
                 } @else {
                     "❓"
                 }
 
                 td class="link" @if let Some(ref uri) = self.uri {
-                    a href=(uri) (self.name())
+                    a href=(uri) (self.name)
                 } @else {
-                    (self.name())
+                    (self.name)
                 }
 
                 td small class="time" @if let Ok(time) = self.time() {

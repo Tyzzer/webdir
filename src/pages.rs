@@ -5,11 +5,12 @@ use std::os::unix::ffi::OsStringExt;
 use std::ffi::OsString;
 use url::percent_encoding;
 use futures::{ stream, Stream, Future, Sink };
-use hyper::{ header, StatusCode, Body, Chunk };
+use hyper::{ header, StatusCode, Body };
 use hyper::server::{ Request, Response };
 use maud::Render;
 use ::utils::path_canonicalize;
-use ::render::{ Entry, up };
+use ::render::up;
+use ::sortdir::SortDir;
 use ::{ error, Httpd };
 
 
@@ -36,15 +37,10 @@ pub fn process(httpd: &Httpd, req: &Request) -> io::Result<Response> {
         let arc_root = Arc::clone(&httpd.root);
 
         let done = send.send(Ok(HTML_HEADER.into()))
-            .and_then(move |send| send
-                .send(Ok(Chunk::from(up(depth == 0).into_string())))
-            )
+            .and_then(move |send| send.send(chunk!(ok up(depth == 0))))
             .map_err(error::Error::from)
-            .and_then(|send| stream::iter(dirs)
-                .map(move |p| Entry::new(&arc_root, p)
-                     .map(|m| Chunk::from(m.render().into_string()))
-                     .map_err(Into::into)
-                )
+            .and_then(|send| stream::iter(SortDir::new(arc_root, dirs))
+                .map(|p| p.map(|m| chunk!(m.render())).map_err(Into::into))
                 .map_err(Into::into)
                 .forward(send)
             )

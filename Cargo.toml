@@ -24,6 +24,7 @@ hyper = { git = "https://github.com/hyperium/hyper.git" }
 url = "*"
 chrono = "*"
 humansize = "*"
+humanesort = "0.1.0-alpha"
 mime_guess = "*"
 maud = "*"
 maud_macros = "*"

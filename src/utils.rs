@@ -22,6 +22,15 @@ macro_rules! err {
     }
 }
 
+macro_rules! chunk {
+    ( ok $chunk:expr ) => {
+        Ok(chunk!($chunk))
+    };
+
+    ( $chunk:expr ) => {
+        ::hyper::Chunk::from($chunk.into_string())
+    }
+}
 
 pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {
     path.as_ref()

@@ -11,9 +11,11 @@ extern crate hyper;
 extern crate maud;
 extern crate chrono;
 extern crate humansize;
+extern crate humanesort;
 
 #[macro_use] mod utils;
 pub mod error;
+mod sortdir;
 mod render;
 mod pages;
 
