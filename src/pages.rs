@@ -3,15 +3,16 @@ use std::sync::Arc;
 use std::fs::File;
 use std::os::unix::ffi::OsStringExt;
 use std::ffi::OsString;
-use url::percent_encoding;
 use futures::{ stream, Stream, Future, Sink };
 use hyper::{ header, StatusCode, Head, Body };
 use hyper::server::{ Request, Response };
+use url::percent_encoding;
 use maud::Render;
 use slog::Logger;
 use ::utils::path_canonicalize;
 use ::render::up;
 use ::sortdir::SortDir;
+use ::entity;
 use ::{ error, Httpd };
 
 
@@ -33,9 +34,9 @@ pub fn process(httpd: &Httpd, log: &Logger, req: &Request) -> io::Result<Respons
 
     let metadata = target_path.metadata()?;
     let log = log.clone();
-    let mut res = Response::new();
 
     if let Ok(dirs) = target_path.read_dir() {
+        let mut res = Response::new();
 
         if req.method() != &Head {
             let arc_root = Arc::clone(&httpd.root);
@@ -64,7 +65,24 @@ pub fn process(httpd: &Httpd, log: &Logger, req: &Request) -> io::Result<Respons
     } else {
         let _ = File::open(&target_path)?;
 
-        unimplemented!()
+        if let Some(&header::Range::Bytes(ref ranges)) = req.headers().get::<header::Range>() {
+            if ranges.len() >= 1 {
+                unimplemented!()
+            } else {
+                unimplemented!()
+            }
+        } else {
+            let (send, body) = Body::pair();
+            let mut res = Response::new()
+                .with_headers(entity::resp_headers(&target_path, &metadata))
+                .with_body(body);
+
+            if req.method() != &Head {
+                unimplemented!()
+            }
+
+            Ok(res)
+        }
     }
 }
 

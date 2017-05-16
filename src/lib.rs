@@ -13,11 +13,15 @@ extern crate maud;
 extern crate chrono;
 extern crate humansize;
 extern crate humanesort;
+extern crate mime_guess;
+extern crate metrohash;
+extern crate data_encoding;
 
 #[macro_use] mod utils;
 pub mod error;
 mod sortdir;
 mod render;
+mod entity;
 mod pages;
 
 use std::{ io, env };
@@ -53,7 +57,7 @@ impl Service for Httpd {
 
         if ![Get, Head].contains(req.method()) {
             return future::ok(
-                pages::fail(&log, false, StatusCode::MethodNotAllowed, &err!(Other))
+                pages::fail(&log, false, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
                     .with_header(header::Allow(vec![Get]))
             );
         }

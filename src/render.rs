@@ -54,6 +54,20 @@ impl Entry {
         FileSize::file_size(&self.metadata.len(), BINARY)
             .unwrap_or_else(|err| err)
     }
+
+    #[inline]
+    pub fn ty(&self) -> u8 {
+        let ty = self.metadata.file_type();
+        if ty.is_dir() {
+            0
+        } else if ty.is_file() {
+            1
+        } else if ty.is_symlink() {
+            2
+        } else {
+            3
+        }
+    }
 }
 
 impl Render for Entry {

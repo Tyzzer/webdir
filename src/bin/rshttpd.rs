@@ -23,12 +23,12 @@ use rshttpd::Httpd;
 
 
 #[derive(StructOpt)]
-#[structopt(name = "rshttpd", about = "A simple satic webserver")]
+#[structopt(name = "rshttpd", about = "A simple static webserver")]
 struct Config {
     #[structopt(long = "bind", help = "specify bind address", default_value = "127.0.0.1:0")]
     addr: SocketAddr,
     #[structopt(long = "root", help = "specify root path")]
-    root: Option<String>
+    root: Option<String>,
 }
 
 

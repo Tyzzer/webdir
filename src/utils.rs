@@ -1,3 +1,4 @@
+use std::mem;
 use std::path::{ Path, PathBuf, Component };
 
 
@@ -81,4 +82,10 @@ fn test_path_canonicalize() {
         path_canonicalize(&root, "aaa/bbb/ccc/../../ddd/aaa.txt"),
         (3, PathBuf::from("/home/aaa/ddd/aaa.txt"))
     );
+}
+
+
+#[inline]
+pub fn u64_to_bytes(x: u64) -> [u8; 8] {
+    unsafe { mem::transmute(x) }
 }
