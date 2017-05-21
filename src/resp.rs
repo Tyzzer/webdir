@@ -1,6 +1,7 @@
-use std::io;
+use std::{ io, fmt };
 use std::sync::Arc;
-use std::fs::File;
+use std::path::Path;
+use std::fs::{ File, Metadata };
 use std::os::unix::ffi::OsStringExt;
 use std::ffi::OsString;
 use futures::{ stream, Stream, Future, Sink };
@@ -12,8 +13,7 @@ use slog::Logger;
 use ::utils::path_canonicalize;
 use ::render::up;
 use ::sortdir::SortDir;
-use ::entity;
-use ::{ error, Httpd };
+use ::{ error, entity, Httpd };
 
 
 const HTML_HEADER: &str = "<html><head><style>\
@@ -63,18 +63,55 @@ pub fn process(httpd: &Httpd, log: &Logger, req: &Request) -> io::Result<Respons
 
         Ok(res.with_header(header::ContentType::html()))
     } else {
+        let etag = entity::etag(&metadata);
+
+        if let Some(&header::IfMatch::Items(ref etags)) = req.headers().get::<header::IfMatch>() {
+            if etags.iter().find(|e| etag.strong_eq(e)).is_none() {
+                return Ok(fail(&log, false, StatusCode::PreconditionFailed, &err!(Other, "Precondition failed")));
+            }
+        }
+
+        if let Some(&header::IfNoneMatch::Items(ref etags)) = req.headers().get::<header::IfNoneMatch>() {
+            if etags.iter().find(|e| etag.weak_eq(e)).is_some() {
+                return Ok(not_modified(&log, &target_path, &metadata, format_args!("{}", etag)));
+            }
+        }
+
+        if let Some(&header::IfModifiedSince(ref date)) = req.headers().get::<header::IfModifiedSince>() {
+            if let Ok(ndate) = metadata.modified() {
+                if date >= &header::HttpDate::from(ndate) {
+                    return Ok(not_modified(&log, &target_path, &metadata, format_args!("{}", date)));
+                }
+            }
+        }
+
+        let mut range = req.headers().get::<header::Range>();
+        match req.headers().get::<header::IfRange>() {
+            Some(&header::IfRange::EntityTag(ref e)) => if !etag.strong_eq(e) {
+                range = None;
+            },
+            Some(&header::IfRange::Date(ref date)) => if let Ok(ndate) = metadata.modified() {
+                if date < &header::HttpDate::from(ndate) {
+                    range = None;
+                }
+            },
+            _ => ()
+        }
+
         let _ = File::open(&target_path)?;
 
         if let Some(&header::Range::Bytes(ref ranges)) = req.headers().get::<header::Range>() {
-            if ranges.len() >= 1 {
-                unimplemented!()
-            } else {
-                unimplemented!()
-            }
+            match entity::process_range(&log, ranges, metadata.len()) {
+                Ok(ranges) => ranges,
+                Err(res) => return Ok(res)
+            };
+
+            unimplemented!()
         } else {
             let (send, body) = Body::pair();
             let mut res = Response::new()
                 .with_headers(entity::resp_headers(&target_path, &metadata))
+                .with_header(header::ETag(etag))
                 .with_body(body);
 
             if req.method() != &Head {
@@ -104,4 +141,14 @@ pub fn fail(log: &Logger, nobody: bool, status: StatusCode, err: &io::Error) -> 
     }
 
     res
+}
+
+#[inline]
+pub fn not_modified(log: &Logger, path: &Path, metadata: &Metadata, display: fmt::Arguments) -> Response {
+    debug!(log, "cache"; "tag" => display);
+
+    Response::new()
+        .with_status(StatusCode::NotModified)
+        .with_headers(entity::resp_headers(&path, &metadata))
+        .with_body(Body::empty())
 }

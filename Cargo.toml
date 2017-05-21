@@ -12,6 +12,7 @@ doc = false
 structopt = "*"
 structopt-derive = "*"
 error-chain = "*"
+smallvec = "*"
 
 bytes = "*"
 futures = "*"

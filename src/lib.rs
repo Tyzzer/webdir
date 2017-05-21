@@ -16,13 +16,14 @@ extern crate humanesort;
 extern crate mime_guess;
 extern crate metrohash;
 extern crate data_encoding;
+extern crate smallvec;
 
 #[macro_use] mod utils;
 pub mod error;
 mod sortdir;
 mod render;
 mod entity;
-mod pages;
+mod resp;
 
 use std::{ io, env };
 use std::sync::Arc;
@@ -57,14 +58,14 @@ impl Service for Httpd {
 
         if ![Get, Head].contains(req.method()) {
             return future::ok(
-                pages::fail(&log, false, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
+                resp::fail(&log, false, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
                     .with_header(header::Allow(vec![Get]))
             );
         }
 
-        match pages::process(self, &log, &req) {
+        match resp::process(self, &log, &req) {
             Ok(res) => future::ok(res),
-            Err(err) => future::ok(pages::fail(
+            Err(err) => future::ok(resp::fail(
                 &log,
                 req.method() == &Head,
                 match err.kind() {
