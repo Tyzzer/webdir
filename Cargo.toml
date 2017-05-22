@@ -21,6 +21,9 @@ tokio-io = "*"
 tokio-core = "*"
 hyper = { git = "https://github.com/hyperium/hyper.git" }
 
+rustls = "*"
+tokio-rustls = "*"
+
 url = "*"
 chrono = "*"
 humansize = "*"
