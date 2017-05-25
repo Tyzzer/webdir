@@ -58,7 +58,7 @@ pub fn process(httpd: &Httpd, log: &Logger, req: &Request) -> io::Result<Respons
                 .map(|_| ())
                 .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
 
-            httpd.handle.spawn(done);
+            httpd.handle.spawn(move |_| done);
         }
 
         Ok(res.with_header(header::ContentType::html()))

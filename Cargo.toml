@@ -19,10 +19,11 @@ futures = "*"
 futures-cpupool = "*"
 tokio-io = "*"
 tokio-core = "*"
+tokio-proto = "*"
 hyper = { git = "https://github.com/hyperium/hyper.git" }
 
 rustls = "*"
-tokio-rustls = "*"
+tokio-rustls = { version = "*", features = [ "tokio-proto" ] }
 
 url = "*"
 chrono = "*"

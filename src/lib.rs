@@ -25,11 +25,11 @@ mod render;
 mod entity;
 mod resp;
 
-use std::{ io, env };
+use std::io;
 use std::sync::Arc;
-use std::path::{ Path, PathBuf };
+use std::path::PathBuf;
 use futures::future::{ self, FutureResult };
-use tokio_core::reactor::Handle;
+use tokio_core::reactor::Remote;
 use hyper::{ header, Get, Head, StatusCode };
 use hyper::server::{ Service, Request, Response };
 use slog::Logger;
@@ -37,7 +37,7 @@ use slog::Logger;
 
 #[derive(Debug, Clone)]
 pub struct Httpd {
-    pub handle: Handle,
+    pub handle: Remote,
     pub root: Arc<PathBuf>,
     pub log: Logger
 }
@@ -50,7 +50,6 @@ impl Service for Httpd {
 
     fn call(&self, req: Request) -> Self::Future {
         let log = self.log.new(o!("addr" => format!("{:?}", req.remote_addr())));
-
         info!(log, "request";
             "path" => req.path(),
             "method" => format_args!("{}", req.method())
@@ -80,16 +79,7 @@ impl Service for Httpd {
 }
 
 impl Httpd {
-    pub fn new(handle: Handle, log: Logger) -> io::Result<Self> {
-        Ok(Httpd {
-            handle: handle,
-            root: Arc::new(env::current_dir()?),
-            log
-        })
-    }
-
-    pub fn set_root<P: AsRef<Path>>(&mut self, path: P) -> io::Result<()> {
-        self.root = Arc::new(path.as_ref().canonicalize()?);
-        Ok(())
+    pub fn new(handle: Remote, log: Logger, root: Arc<PathBuf>) -> Self {
+        Httpd { handle, root, log }
     }
 }
