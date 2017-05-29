@@ -20,10 +20,8 @@ extern crate smallvec;
 
 #[macro_use] mod utils;
 pub mod error;
-mod sortdir;
-mod render;
-mod entity;
-mod resp;
+pub mod response;
+mod process;
 
 use std::io;
 use std::sync::Arc;
@@ -33,6 +31,7 @@ use tokio_core::reactor::Remote;
 use hyper::{ header, Get, Head, StatusCode };
 use hyper::server::{ Service, Request, Response };
 use slog::Logger;
+use process::Process;
 
 
 #[derive(Debug, Clone)]
@@ -57,14 +56,14 @@ impl Service for Httpd {
 
         if ![Get, Head].contains(req.method()) {
             return future::ok(
-                resp::fail(&log, false, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
+                response::fail(&log, false, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
                     .with_header(header::Allow(vec![Get]))
             );
         }
 
-        match resp::process(self, &log, &req) {
+        match Process::new(self, &log, &req).process() {
             Ok(res) => future::ok(res),
-            Err(err) => future::ok(resp::fail(
+            Err(err) => future::ok(response::fail(
                 &log,
                 req.method() == &Head,
                 match err.kind() {

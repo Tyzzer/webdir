@@ -30,7 +30,7 @@ use rshttpd::Httpd;
 #[derive(StructOpt)]
 #[structopt(name = "rshttpd", about = "A simple static webserver")]
 struct Config {
-    #[structopt(long = "bind", help = "specify bind address", default_value = "127.0.0.1:0")]
+    #[structopt(long = "bind", help = "specify bind address", default_value = "127.0.0.1:8080")]
     addr: SocketAddr,
     #[structopt(long = "root", help = "specify root path")]
     root: Option<String>,
@@ -54,7 +54,7 @@ fn start(config: Config) -> io::Result<()> {
 
     let opt_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
         let mut tls_config = ServerConfig::new();
-        tls_config.set_single_cert(load_certs(&cert)?, load_keys(&key)?.remove(0));
+        tls_config.set_single_cert(load_certs(cert)?, load_keys(key)?.remove(0));
         tls_config.set_persistence(ServerSessionMemoryCache::new(config.session_buff));
         Some(Arc::new(tls_config))
     } else {
@@ -67,10 +67,7 @@ fn start(config: Config) -> io::Result<()> {
         Arc::new(env::current_dir()?)
     };
 
-    info!(log, "listening";
-        "addr" => format_args!("{}", config.addr), // FIXME socket addr
-        "root" => format_args!("{}", root.display())
-    );
+    info!(log, "listening"; "root" => format_args!("{}", root.display()));
 
     if let Some(tls_config) = opt_tls_config {
         let mut server = TcpServer::new(Server::new(Http::new(), tls_config), config.addr);
