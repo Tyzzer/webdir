@@ -48,25 +48,22 @@ impl Service for Httpd {
     type Future = FutureResult<Self::Response, Self::Error>;
 
     fn call(&self, req: Request) -> Self::Future {
-        let log = self.log.new(o!("addr" => format!("{:?}", req.remote_addr())));
-            // ^ FIXME https://github.com/tokio-rs/tokio-proto/blob/master/src/tcp_server.rs#L189
-            // tokio-proto TcpServer should handle remote_addr.
-        info!(log, "request";
+        info!(self.log, "request";
             "path" => req.path(),
             "method" => format_args!("{}", req.method())
         );
 
         if ![Get, Head].contains(req.method()) {
             return future::ok(
-                response::fail(&log, false, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
+                response::fail(&self.log, false, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
                     .with_header(header::Allow(vec![Get]))
             );
         }
 
-        match Process::new(self, &log, &req).process() {
+        match Process::new(self, &self.log, &req).process() {
             Ok(res) => future::ok(res),
             Err(err) => future::ok(response::fail(
-                &log,
+                &self.log,
                 req.method() != &Head,
                 match err.kind() {
                     io::ErrorKind::NotFound => StatusCode::NotFound,
@@ -80,6 +77,7 @@ impl Service for Httpd {
 }
 
 impl Httpd {
+    #[inline]
     pub fn new(handle: Remote, log: Logger, root: Arc<PathBuf>) -> Self {
         Httpd { handle, root, log }
     }

@@ -3,8 +3,9 @@ extern crate slog_term;
 extern crate slog_async;
 #[macro_use] extern crate structopt_derive;
 extern crate structopt;
-extern crate tokio_proto;
+extern crate futures;
 extern crate hyper;
+extern crate tokio_core;
 extern crate rustls;
 extern crate tokio_rustls;
 #[macro_use] extern crate rshttpd;
@@ -19,18 +20,20 @@ use slog::{ Drain, Logger };
 use slog_term::{ CompactFormat, TermDecorator };
 use slog_async::Async;
 use structopt::StructOpt;
-use tokio_proto::TcpServer;
+use futures::{ Future, Stream };
 use hyper::server::Http;
+use tokio_core::reactor::Core;
+use tokio_core::net::TcpListener;
 use rustls::{ Certificate, PrivateKey, ServerConfig, ServerSessionMemoryCache };
 use rustls::internal::pemfile::{ certs, rsa_private_keys };
-use tokio_rustls::proto::Server;
+use tokio_rustls::ServerConfigExt;
 use rshttpd::Httpd;
 
 
 #[derive(StructOpt)]
 #[structopt(name = "rshttpd", about = "A simple static webserver")]
 struct Config {
-    #[structopt(long = "bind", help = "specify bind address", default_value = "127.0.0.1:8080")]
+    #[structopt(long = "bind", help = "specify bind address", default_value = "127.0.0.1:0")]
     addr: SocketAddr,
     #[structopt(long = "root", help = "specify root path")]
     root: Option<String>,
@@ -40,8 +43,6 @@ struct Config {
     key: Option<String>,
     #[structopt(long = "session-buff", help = "specify TLS session buff size", default_value = "64")]
     session_buff: usize,
-    #[structopt(long = "threads", help = "specify threads", default_value = "1")]
-    threads: usize
 }
 
 
@@ -67,25 +68,38 @@ fn start(config: Config) -> io::Result<()> {
         Arc::new(env::current_dir()?)
     };
 
-    info!(log, "listening"; "root" => format_args!("{}", root.display()));
+    let mut core = Core::new()?;
+    let handle = core.handle();
+    let remote = handle.remote().clone();
+    let listener = TcpListener::bind(&config.addr, &handle)?;
 
-    if let Some(tls_config) = opt_tls_config {
-        let mut server = TcpServer::new(Server::new(Http::new(), tls_config), config.addr);
-        server.threads(config.threads);
-        server.with_handle(move |handle| {
-            let httpd = Httpd::new(handle.remote().clone(), log.clone(), root.clone());
-            move || Ok(httpd.clone())
-        });
-    } else {
-        let mut server = TcpServer::new(Http::new(), config.addr);
-        server.threads(config.threads);
-        server.with_handle(move |handle| {
-            let httpd = Httpd::new(handle.remote().clone(), log.clone(), root.clone());
-            move || Ok(httpd.clone())
-        });
-    }
+    info!(log, "listening";
+        "root" => format_args!("{}", root.display()),
+        "listen" => format_args!("{}", listener.local_addr()?)
+    );
 
-    Ok(())
+    let done = listener.incoming().for_each(|(stream, addr)| {
+        let log = log.new(o!("addr" => format!("{}", addr)));
+        let httpd = Httpd::new(remote.clone(), log.clone(), root.clone());
+
+        if let Some(ref tls_config) = opt_tls_config {
+            let handle2 = handle.clone();
+
+            let done = tls_config.accept_async(stream)
+                .map(move |stream| Http::new()
+                    .bind_connection(&handle2, stream, addr, httpd)
+                )
+                .map_err(move |err| error!(log, "tls"; "error" => format_args!("{}", err)));
+
+            handle.spawn(done);
+        } else {
+            Http::new().bind_connection(&handle, stream, addr, httpd);
+        }
+
+        Ok(())
+    });
+
+    core.run(done)
 }
 
 
