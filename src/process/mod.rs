@@ -38,8 +38,8 @@ impl<'a> Process<'a> {
     pub fn process(&self) -> io::Result<Response> {
         let metadata = self.path.metadata()?;
 
-        if let Ok(dirs) = self.path.read_dir() {
-            self.process_dirs(dirs)
+        if let Ok(dir) = self.path.read_dir() {
+            self.process_dir(dir)
         } else {
             self.process_file(&metadata)
         }
@@ -47,7 +47,7 @@ impl<'a> Process<'a> {
 }
 
 impl<'a> Process<'a> {
-    fn process_dirs(&self, dirs: ReadDir) -> io::Result<Response> {
+    fn process_dir(&self, dir: ReadDir) -> io::Result<Response> {
         const HTML_HEADER: &str = "<html><head><style>\
             .time { padding-left: 12em; }\
             .size {\
@@ -61,15 +61,15 @@ impl<'a> Process<'a> {
 
         if self.req.method() != &Head {
             let log = self.log.clone();
-            let depth = self.depth;
+            let is_root = self.depth == 0;
             let arc_root = Arc::clone(&self.httpd.root);
             let (send, body) = Body::pair();
             res.set_body(body);
 
             let done = send.send(Ok(HTML_HEADER.into()))
-                .and_then(move |send| send.send(chunk!(ok up(depth == 0))))
+                .and_then(move |send| send.send(chunk!(ok up(is_root))))
                 .map_err(error::Error::from)
-                .and_then(|send| stream::iter(SortDir::new(arc_root, dirs))
+                .and_then(|send| stream::iter(SortDir::new(arc_root, dir))
                     .map(|p| p.map(|m| chunk!(m.render())).map_err(Into::into))
                     .map_err(Into::into)
                     .forward(send)

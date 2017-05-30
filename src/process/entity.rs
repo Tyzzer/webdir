@@ -62,8 +62,8 @@ impl<'a> Entity<'a> {
         if let Some(&header::IfMatch::Items(ref etags)) = headers.get::<header::IfMatch>() {
             if etags.iter().find(|e| self.etag.strong_eq(e)).is_none() {
                 return EntifyResult::Err(fail(
-                    self.log, false,
-                    StatusCode::PreconditionFailed, &err!(Other, "Precondition failed")
+                    self.log, false, StatusCode::PreconditionFailed,
+                    &err!(Other, "Precondition failed")
                 ));
             }
         }

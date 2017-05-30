@@ -49,6 +49,8 @@ impl Service for Httpd {
 
     fn call(&self, req: Request) -> Self::Future {
         let log = self.log.new(o!("addr" => format!("{:?}", req.remote_addr())));
+            // ^ FIXME https://github.com/tokio-rs/tokio-proto/blob/master/src/tcp_server.rs#L189
+            // tokio-proto TcpServer should handle remote_addr.
         info!(log, "request";
             "path" => req.path(),
             "method" => format_args!("{}", req.method())
@@ -65,7 +67,7 @@ impl Service for Httpd {
             Ok(res) => future::ok(res),
             Err(err) => future::ok(response::fail(
                 &log,
-                req.method() == &Head,
+                req.method() != &Head,
                 match err.kind() {
                     io::ErrorKind::NotFound => StatusCode::NotFound,
                     io::ErrorKind::PermissionDenied => StatusCode::Forbidden,
