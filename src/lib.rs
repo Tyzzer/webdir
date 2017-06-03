@@ -48,17 +48,17 @@ impl Service for Httpd {
     type Future = FutureResult<Self::Response, Self::Error>;
 
     fn call(&self, req: Request) -> Self::Future {
-        info!(self.log, "request";
-            "path" => req.path(),
-            "method" => format_args!("{}", req.method())
-        );
-
         if ![Get, Head].contains(req.method()) {
             return future::ok(
                 response::fail(&self.log, false, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
                     .with_header(header::Allow(vec![Get]))
             );
         }
+
+        info!(self.log, "request";
+            "path" => req.path(),
+            "method" => format_args!("{}", req.method())
+        );
 
         match Process::new(self, &self.log, &req).process() {
             Ok(res) => future::ok(res),

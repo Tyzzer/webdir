@@ -1,11 +1,11 @@
 mod sortdir;
 mod entity;
+mod multipart;
 
 use std::io;
-use std::sync::Arc;
 use std::ffi::OsString;
 use std::path::PathBuf;
-use std::fs::{ File, Metadata, ReadDir };
+use std::fs::{ Metadata, ReadDir };
 use std::os::unix::ffi::OsStringExt;
 use futures::{ stream, Stream, Future, Sink };
 use hyper::{ header, Request, Response, Head, Body };
@@ -62,14 +62,14 @@ impl<'a> Process<'a> {
         if self.req.method() != &Head {
             let log = self.log.clone();
             let is_root = self.depth == 0;
-            let arc_root = Arc::clone(&self.httpd.root);
+            let root = self.httpd.root.clone();
             let (send, body) = Body::pair();
             res.set_body(body);
 
             let done = send.send(Ok(HTML_HEADER.into()))
                 .and_then(move |send| send.send(chunk!(ok up(is_root))))
                 .map_err(error::Error::from)
-                .and_then(|send| stream::iter(SortDir::new(arc_root, dir))
+                .and_then(|send| stream::iter(SortDir::new(root, dir))
                     .map(|p| p.map(|m| chunk!(m.render())).map_err(Into::into))
                     .map_err(Into::into)
                     .forward(send)

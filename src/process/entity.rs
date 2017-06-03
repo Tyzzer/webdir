@@ -60,7 +60,7 @@ impl<'a> Entity<'a> {
 
     pub fn check(&self, headers: &Headers) -> EntifyResult {
         if let Some(&header::IfMatch::Items(ref etags)) = headers.get::<header::IfMatch>() {
-            if etags.iter().find(|e| self.etag.strong_eq(e)).is_none() {
+            if !etags.iter().any(|e| self.etag.strong_eq(e)) {
                 return EntifyResult::Err(fail(
                     self.log, false, StatusCode::PreconditionFailed,
                     &err!(Other, "Precondition failed")
