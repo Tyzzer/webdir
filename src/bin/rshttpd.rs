@@ -38,19 +38,19 @@ use rshttpd::Httpd;
 #[derive(Serialize, Deserialize)]
 #[structopt]
 struct Config {
-    #[structopt(long = "bind", help = "specify bind address")]
+    #[structopt(long = "bind", help = "bind address")]
     addr: Option<SocketAddr>,
-    #[structopt(long = "root", help = "specify root path")]
+    #[structopt(long = "root", help = "root path")]
     root: Option<String>,
-    #[structopt(long = "cert", help = "specify TLS cert path", requires = "key")]
+    #[structopt(long = "cert", help = "TLS cert", requires = "key")]
     cert: Option<String>,
-    #[structopt(long = "key", help = "specify TLS key path", requires = "cert")]
+    #[structopt(long = "key", help = "TLS key", requires = "cert")]
     key: Option<String>,
-    #[structopt(long = "session-buff", help = "specify TLS session buff size")]
+    #[structopt(long = "session-buff", help = "TLS session buff size")]
     session_buff: Option<usize>,
 
     #[serde(skip_serializing)]
-    #[structopt(short = "c", long = "config", help = "specify config path")]
+    #[structopt(short = "c", long = "config", help = "Read config from File")]
     config: Option<String>
 }
 
@@ -62,7 +62,7 @@ fn start(config: Config) -> io::Result<()> {
     let drain = Async::new(drain).build().fuse();
     let log = Logger::root(Arc::new(drain), o!("version" => env!("CARGO_PKG_VERSION")));
 
-    let opt_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
+    let maybe_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
         let mut tls_config = ServerConfig::new();
         tls_config.set_single_cert(load_certs(cert)?, load_keys(key)?.remove(0));
         tls_config.set_persistence(ServerSessionMemoryCache::new(config.session_buff.unwrap_or(64)));
@@ -94,7 +94,7 @@ fn start(config: Config) -> io::Result<()> {
         let log = log.new(o!("addr" => format!("{}", addr)));
         let httpd = Httpd::new(remote.clone(), log.clone(), root.clone());
 
-        if let Some(ref tls_config) = opt_tls_config {
+        if let Some(ref tls_config) = maybe_tls_config {
             let handle2 = handle.clone();
 
             let done = tls_config.accept_async(stream)
@@ -157,15 +157,15 @@ fn make_config() -> io::Result<Config> {
         }
         if args_config.root.is_none() {
             args_config.root = config.root
-                .map(|p| path.join(p).to_string_lossy().into_owned());
+                .map(|p| path.with_file_name(p).to_string_lossy().into_owned());
         }
         if args_config.cert.is_none() {
             args_config.cert = config.cert
-                .map(|p| path.join(p).to_string_lossy().into_owned());
+                .map(|p| path.with_file_name(p).to_string_lossy().into_owned());
         }
         if args_config.key.is_none() {
             args_config.key = config.key
-                .map(|p| path.join(p).to_string_lossy().into_owned());
+                .map(|p| path.with_file_name(p).to_string_lossy().into_owned());
         }
         if args_config.session_buff.is_none() {
             args_config.session_buff = config.session_buff;

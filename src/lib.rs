@@ -20,7 +20,7 @@ extern crate smallvec;
 
 #[macro_use] mod utils;
 pub mod error;
-pub mod response;
+mod response;
 mod process;
 
 use std::io;
