@@ -1,8 +1,9 @@
-use std::io;
+use std::{ io, fmt };
 use std::ops::Add;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use std::cmp::Ordering;
+use std::ffi::OsString;
 use std::path::{ PathBuf, Path };
 use std::fs::{ DirEntry, ReadDir, Metadata };
 use std::os::unix::ffi::OsStrExt;
@@ -25,8 +26,8 @@ impl SortDir {
     pub fn new(root: Arc<PathBuf>, mut readdir: ReadDir) -> Self {
         fn sort_by_entry(x: &IoRREntry, y: &IoRREntry) -> Ordering {
             if let (&Ok(Ok(ref x)), &Ok(Ok(ref y))) = (x, y) {
-                match Ord::cmp(&x.ty(), &y.ty()) {
-                    Ordering::Equal => HumaneOrder::humane_cmp(&x.name, &y.name),
+                match Ord::cmp(&x.ty, &y.ty) {
+                    Ordering::Equal => HumaneOrder::humane_cmp(&x.name.to_string_lossy(), &y.name.to_string_lossy()),
                     order => order
                 }
             } else {
@@ -39,7 +40,7 @@ impl SortDir {
             .map(|entry| entry.map(|p| Entry::new(&root, p)))
             .take(SORTDIR_BUFF_LENGTH)
             .collect::<Vec<_>>();
-        buf.sort_by(|x, y| sort_by_entry(y, x));
+        buf.sort_unstable_by(|x, y| sort_by_entry(y, x));
 
         SortDir { root, readdir, buf }
     }
@@ -62,22 +63,58 @@ impl Iterator for SortDir {
 }
 
 
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub enum EntryType {
+    Symlink,
+    File,
+    Dir,
+    Other
+}
+
+impl fmt::Display for EntryType {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        use std::fmt::Write;
+
+        f.write_char(match *self {
+            EntryType::Symlink => '🔁',
+            EntryType::File => '📄',
+            EntryType::Dir => '📁',
+            EntryType::Other => '❓'
+        })
+    }
+}
+
 pub struct Entry {
     pub metadata: Metadata,
-    pub name: String,
+    pub name: OsString,
     pub uri: Option<String>,
-    pub is_symlink: bool
+    pub ty: EntryType
 }
 
 impl Entry {
     pub fn new(base: &Path, entry: DirEntry) -> io::Result<Self> {
         let mut metadata = entry.metadata()?;
         let path = entry.path();
-        let name = entry.file_name().to_string_lossy().into();
+        let name = entry.file_name();
         let is_symlink = metadata.file_type().is_symlink();
         if is_symlink {
             metadata = path.metadata()?;
         }
+
+        let ty = if is_symlink {
+            EntryType::Symlink
+        } else {
+            let ty = metadata.file_type();
+            if ty.is_dir() {
+                EntryType::Dir
+            } else if ty.is_file() {
+                EntryType::File
+            } else if ty.is_symlink() {
+                EntryType::Symlink
+            } else {
+                EntryType::Other
+            }
+        };
 
         let uri = path.strip_prefix(base)
             .map(|p| percent_encoding::percent_encode(
@@ -88,7 +125,7 @@ impl Entry {
             .map(|p| if metadata.is_dir() { p + "/" } else { p })
             .ok();
 
-        Ok(Entry { metadata, name, uri, is_symlink })
+        Ok(Entry { metadata, name, uri, ty })
     }
 
     pub fn time(&self) -> io::Result<String> {
@@ -107,42 +144,18 @@ impl Entry {
         FileSize::file_size(&self.metadata.len(), BINARY)
             .unwrap_or_else(|err| err)
     }
-
-    #[inline]
-    pub fn ty(&self) -> u8 {
-        let ty = self.metadata.file_type();
-        if ty.is_dir() {
-            0
-        } else if ty.is_file() {
-            1
-        } else if ty.is_symlink() {
-            2
-        } else {
-            3
-        }
-    }
 }
 
 impl Render for Entry {
     fn render(&self) -> Markup {
-        let file_type = self.metadata.file_type();
-
         html!{
             tr {
-                td class="icon" @if self.is_symlink {
-                    "↩️"
-                } @else if file_type.is_file() {
-                    "📄"
-                } @else if file_type.is_dir() {
-                    "📁"
-                } @else {
-                    "❓"
-                }
+                td class="icon" (self.ty)
 
                 td class="link" @if let Some(ref uri) = self.uri {
-                    a href=(uri) (self.name)
+                    a href=(uri) (self.name.to_string_lossy())
                 } @else {
-                    (self.name)
+                    (self.name.to_string_lossy())
                 }
 
                 td small class="time" @if let Ok(time) = self.time() {
@@ -151,7 +164,7 @@ impl Render for Entry {
                     "-"
                 }
 
-                td class="size" @if file_type.is_file() {
+                td class="size" @if let EntryType::File = self.ty {
                     (self.size())
                 } @else {
                     "-"

@@ -87,3 +87,9 @@ fn test_path_canonicalize() {
 pub fn u64_to_bytes(x: u64) -> [u8; 8] {
     unsafe { mem::transmute(x) }
 }
+
+#[test]
+fn test_u64_to_bytes() {
+    assert_eq!(u64_to_bytes(0), [0; 8]);
+    assert_eq!(u64_to_bytes(::std::u64::MAX), [255; 8]);
+}

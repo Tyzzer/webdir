@@ -1,4 +1,4 @@
-#![feature(plugin)]
+#![feature(plugin, sort_unstable)]
 #![plugin(maud_macros)]
 
 #[macro_use] extern crate error_chain;
