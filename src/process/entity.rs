@@ -45,11 +45,12 @@ impl<'a> Entity<'a> {
         )
     }
 
-    pub fn headers(&self) -> Headers {
+    pub fn headers(self) -> Headers {
         let mut headers = Headers::new();
         headers.set(header::ContentType(guess_mime_type(&self.path)));
         headers.set(header::ContentLength(self.metadata.len()));
         headers.set(header::AcceptRanges(vec![header::RangeUnit::Bytes]));
+        headers.set(header::ETag(self.etag));
 
         if let Ok(date) = self.metadata.modified() {
             headers.set(header::LastModified(header::HttpDate::from(date)));
@@ -70,20 +71,14 @@ impl<'a> Entity<'a> {
 
         if let Some(&header::IfNoneMatch::Items(ref etags)) = headers.get::<header::IfNoneMatch>() {
             if etags.iter().any(|e| self.etag.weak_eq(e)) {
-                return EntifyResult::Err(
-                    not_modified(self.log, format_args!("{}", self.etag))
-                        .with_headers(self.headers())
-                );
+                return EntifyResult::Err(not_modified(self.log, format_args!("{}", self.etag)));
             }
         }
 
         if let Some(&header::IfModifiedSince(ref date)) = headers.get::<header::IfModifiedSince>() {
             if let Ok(ndate) = self.metadata.modified() {
                 if date >= &header::HttpDate::from(ndate) {
-                    return EntifyResult::Err(
-                        not_modified(self.log, format_args!("{}", date))
-                            .with_headers(self.headers())
-                    );
+                    return EntifyResult::Err(not_modified(self.log, format_args!("{}", date)));
                 }
             }
         }

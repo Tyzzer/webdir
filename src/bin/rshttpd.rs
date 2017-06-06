@@ -46,7 +46,7 @@ struct Config {
     cert: Option<String>,
     #[structopt(long = "key", help = "TLS key", requires = "cert")]
     key: Option<String>,
-    #[structopt(long = "session-buff", help = "TLS session buff size")]
+    #[structopt(long = "session-buff", help = "TLS session buff")]
     session_buff: Option<usize>,
 
     #[serde(skip_serializing)]

@@ -59,7 +59,9 @@ impl<'a> Process<'a> {
 
         let mut res = Response::new();
 
-        if self.req.method() != &Head {
+        if self.req.method() == &Head {
+            res.set_body(Body::empty());
+        } else {
             let log = self.log.clone();
             let is_root = self.depth == 0;
             let root = self.httpd.root.clone();
@@ -91,7 +93,11 @@ impl<'a> Process<'a> {
         let entity = Entity::new(&self.path, metadata, self.log);
 
         match entity.check(self.req.headers()) {
-            EntifyResult::Err(resp) => Ok(resp),
+            EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers())),
+            _ if self.req.method() == &Head => Ok(Response::new()
+                .with_headers(entity.headers())
+                .with_body(Body::empty())
+            ),
             EntifyResult::None => unimplemented!(),
             EntifyResult::One(range) => unimplemented!(),
             EntifyResult::Vec(ranges) => unimplemented!()
