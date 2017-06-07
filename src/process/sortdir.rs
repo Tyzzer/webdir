@@ -65,9 +65,9 @@ impl Iterator for SortDir {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum EntryType {
-    Symlink,
-    File,
     Dir,
+    File,
+    Symlink,
     Other
 }
 
@@ -76,9 +76,9 @@ impl fmt::Display for EntryType {
         use std::fmt::Write;
 
         f.write_char(match *self {
-            EntryType::Symlink => '🔁',
-            EntryType::File => '📄',
             EntryType::Dir => '📁',
+            EntryType::File => '📄',
+            EntryType::Symlink => '🔁',
             EntryType::Other => '❓'
         })
     }

@@ -7,7 +7,7 @@ use std::ffi::OsString;
 use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
 use std::os::unix::ffi::OsStringExt;
-use futures::{ stream, Stream, Future, Sink };
+use futures::{ stream, Stream, Future };
 use hyper::{ header, Request, Response, Head, Body };
 use url::percent_encoding;
 use maud::Render;
@@ -68,18 +68,14 @@ impl<'a> Process<'a> {
             let (send, body) = Body::pair();
             res.set_body(body);
 
-            let done = send.send(Ok(HTML_HEADER.into()))
-                .and_then(move |send| send.send(chunk!(ok up(is_root))))
-                .map_err(error::Error::from)
-                .and_then(|send| stream::iter(SortDir::new(root, dir))
+            let done = stream::once(Ok(Ok(HTML_HEADER.into())))
+                .chain(stream::once(Ok(chunk!(ok up(is_root)))))
+                .chain(stream::iter(SortDir::new(root, dir))
                     .map(|p| p.map(|m| chunk!(m.render())).map_err(Into::into))
-                    .map_err(Into::into)
-                    .forward(send)
                 )
-                .and_then(|(_, send)| send
-                    .send(Ok(HTML_FOOTER.into()))
-                    .map_err(Into::into)
-                )
+                .chain(stream::once(Ok(Ok(HTML_FOOTER.into()))))
+                .map_err(error::Error::from)
+                .forward(send)
                 .map(|_| ())
                 .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
 
@@ -96,7 +92,7 @@ impl<'a> Process<'a> {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
             ref result if self.req.method() == &Head => Ok(Response::new()
                 .with_headers(entity.headers(
-                    if let &EntifyResult::Vec(_) = result { true }
+                    if let EntifyResult::Vec(_) = *result { true }
                     else { false }
                 ))
                 .with_body(Body::empty())
