@@ -1,9 +1,10 @@
-use std::cmp;
+use std::{ io, cmp };
 use std::ops::Range;
 use std::hash::Hasher;
 use std::path::Path;
 use std::fs::Metadata;
 use std::os::unix::fs::MetadataExt;
+use tokio_core::reactor::Handle;
 use hyper::{ header, Headers, Response, StatusCode };
 use hyper::header::ByteRangeSpec;
 use slog::Logger;
@@ -13,7 +14,10 @@ use metrohash::MetroHash;
 use data_encoding::base64url;
 use ::response::{ fail, not_modified };
 use ::utils::u64_to_bytes;
+use super::file;
 
+
+pub const BOUNDARY: &str = env!("CARGO_PKG_NAME");
 
 pub struct Entity<'a> {
     path: &'a Path,
@@ -45,12 +49,22 @@ impl<'a> Entity<'a> {
         )
     }
 
-    pub fn headers(self) -> Headers {
+    pub fn open(&self, _handle: Handle) -> io::Result<file::File> {
+        Ok(file::File)
+    }
+
+    pub fn headers(self, is_multipart: bool) -> Headers {
         let mut headers = Headers::new();
-        headers.set(header::ContentType(guess_mime_type(&self.path)));
+
         headers.set(header::ContentLength(self.metadata.len()));
         headers.set(header::AcceptRanges(vec![header::RangeUnit::Bytes]));
         headers.set(header::ETag(self.etag));
+
+        if is_multipart {
+            headers.set_raw("Content-Type", format!("multipart/byteranges; boundary={}", BOUNDARY));
+        } else {
+            headers.set(header::ContentType(guess_mime_type(&self.path)));
+        }
 
         if let Ok(date) = self.metadata.modified() {
             headers.set(header::LastModified(header::HttpDate::from(date)));

@@ -1,6 +1,6 @@
 mod sortdir;
 mod entity;
-mod multipart;
+mod file;
 
 use std::io;
 use std::ffi::OsString;
@@ -83,7 +83,7 @@ impl<'a> Process<'a> {
                 .map(|_| ())
                 .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
 
-            self.httpd.handle.spawn(move |_| done);
+            self.httpd.remote.spawn(move |_| done);
         }
 
         Ok(res.with_header(header::ContentType::html()))
@@ -93,14 +93,36 @@ impl<'a> Process<'a> {
         let entity = Entity::new(&self.path, metadata, self.log);
 
         match entity.check(self.req.headers()) {
-            EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers())),
-            _ if self.req.method() == &Head => Ok(Response::new()
-                .with_headers(entity.headers())
+            EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
+            ref result if self.req.method() == &Head => Ok(Response::new()
+                .with_headers(entity.headers(
+                    if let &EntifyResult::Vec(_) = result { true }
+                    else { false }
+                ))
                 .with_body(Body::empty())
             ),
             EntifyResult::None => unimplemented!(),
             EntifyResult::One(range) => unimplemented!(),
-            EntifyResult::Vec(ranges) => unimplemented!()
+            EntifyResult::Vec(ranges) => {
+                let handle = self.httpd.remote.handle()
+                    .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
+
+                let fd = entity.open(handle)?;
+                let mut res = Response::new();
+                let (send, body) = Body::pair();
+                res.set_body(body);
+
+                let done = stream::iter::<_, _, error::Error>(ranges.into_iter().map(Ok))
+                    .map(move |range| fd.read(range))
+                    .flatten()
+                    .forward(send)
+                    .map(|_| ())
+                    .map_err(|_| ());
+
+                self.httpd.remote.spawn(move |_| done);
+
+                Ok(res)
+            }
         }
     }
 }

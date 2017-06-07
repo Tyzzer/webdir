@@ -36,7 +36,7 @@ use process::Process;
 
 #[derive(Debug, Clone)]
 pub struct Httpd {
-    pub handle: Remote,
+    pub remote: Remote,
     pub root: Arc<PathBuf>,
     pub log: Logger
 }
@@ -78,7 +78,7 @@ impl Service for Httpd {
 
 impl Httpd {
     #[inline]
-    pub fn new(handle: Remote, log: Logger, root: Arc<PathBuf>) -> Self {
-        Httpd { handle, root, log }
+    pub fn new(remote: Remote, log: Logger, root: Arc<PathBuf>) -> Self {
+        Httpd { remote, root, log }
     }
 }
