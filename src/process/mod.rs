@@ -3,16 +3,13 @@ mod entity;
 mod file;
 
 use std::io;
-use std::ffi::OsString;
 use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
-use std::os::unix::ffi::OsStringExt;
 use futures::{ stream, Stream, Future };
 use hyper::{ header, Request, Response, Head, Body };
-use url::percent_encoding;
 use maud::Render;
 use slog::Logger;
-use ::utils::path_canonicalize;
+use ::utils::{ path_canonicalize, decode_path };
 use ::{ error, Httpd };
 use self::sortdir::{ SortDir, up };
 use self::entity::{ Entity, EntifyResult };
@@ -28,9 +25,7 @@ pub struct Process<'a> {
 
 impl<'a> Process<'a> {
     pub fn new(httpd: &'a Httpd, log: &'a Logger, req: &'a Request) -> Process<'a> {
-        let path_buf = percent_encoding::percent_decode(req.path().as_bytes())
-            .collect::<Vec<u8>>();
-        let path_buf = OsString::from_vec(path_buf);
+        let path_buf = decode_path(req.path());
         let (depth, path) = path_canonicalize(&httpd.root, path_buf);
         Process { httpd, log, req, depth, path }
     }

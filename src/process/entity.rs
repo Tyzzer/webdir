@@ -3,7 +3,6 @@ use std::ops::Range;
 use std::hash::Hasher;
 use std::path::Path;
 use std::fs::Metadata;
-use std::os::unix::fs::MetadataExt;
 use tokio_core::reactor::Handle;
 use hyper::{ header, Headers, Response, StatusCode };
 use hyper::header::ByteRangeSpec;
@@ -38,12 +37,41 @@ impl<'a> Entity<'a> {
         Entity { path, metadata, log, etag: Self::etag(metadata) }
     }
 
+    #[cfg(unix)]
     fn etag(metadata: &Metadata) -> header::EntityTag {
+        use std::os::unix::fs::MetadataExt;
+
         let mut hasher = MetroHash::default();
         hasher.write_u64(metadata.ino());
         hasher.write_u64(metadata.len());
         hasher.write_i64(metadata.mtime());
         hasher.write_i64(metadata.mtime_nsec());
+        header::EntityTag::strong(
+            base64url::encode_nopad(&u64_to_bytes(hasher.finish()))
+        )
+    }
+
+    #[cfg(not(unix))]
+    fn etag(metadata: &Metadata) -> header::EntityTag {
+        use std::hash::Hash;
+        use std::time::UNIX_EPOCH;
+
+        let mut hasher = MetroHash::default();
+        metadata.file_type().hash(&mut hasher);
+        metadata.len().hash(&mut hasher);
+
+        if let Ok(time) = metadata.created() {
+            if let Ok(time) = time.duration_since(UNIX_EPOCH) {
+                time.hash(&mut hasher);
+            }
+        }
+
+        if let Ok(time) = metadata.modified() {
+            if let Ok(time) = time.duration_since(UNIX_EPOCH) {
+                time.hash(&mut hasher);
+            }
+        }
+
         header::EntityTag::strong(
             base64url::encode_nopad(&u64_to_bytes(hasher.finish()))
         )

@@ -1,5 +1,7 @@
 use std::mem;
+use std::ops::Add;
 use std::path::{ Path, PathBuf, Component };
+use url::percent_encoding::{ DEFAULT_ENCODE_SET, percent_encode, percent_decode };
 
 
 #[macro_export]
@@ -33,7 +35,7 @@ macro_rules! chunk {
     }
 }
 
-pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {
+pub(crate) fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {
     path.as_ref()
         .components()
         .fold((0, root.to_path_buf()), |(mut depth, mut sum), next| {
@@ -84,7 +86,7 @@ fn test_path_canonicalize() {
 
 
 #[inline]
-pub fn u64_to_bytes(x: u64) -> [u8; 8] {
+pub(crate) fn u64_to_bytes(x: u64) -> [u8; 8] {
     unsafe { mem::transmute(x) }
 }
 
@@ -92,4 +94,44 @@ pub fn u64_to_bytes(x: u64) -> [u8; 8] {
 fn test_u64_to_bytes() {
     assert_eq!(u64_to_bytes(0), [0; 8]);
     assert_eq!(u64_to_bytes(::std::u64::MAX), [255; 8]);
+}
+
+
+#[cfg(unix)]
+#[inline]
+pub(crate) fn encode_path(path: &Path) -> String {
+    use std::os::unix::ffi::OsStrExt;
+
+    percent_encode(path.as_os_str().as_bytes(), DEFAULT_ENCODE_SET)
+        .fold(String::from("/"), Add::add)
+}
+
+#[cfg(not(unix))]
+#[inline]
+pub(crate) fn encode_path(path: &Path) -> String {
+    let p = path.to_string_lossy();
+    let p = p.as_bytes();
+
+    percent_encode(p, DEFAULT_ENCODE_SET)
+        .fold(String::from("/"), Add::add)
+}
+
+
+#[cfg(unix)]
+#[inline]
+pub(crate) fn decode_path(path: &str) -> PathBuf {
+    use std::ffi::OsString;
+    use std::os::unix::ffi::OsStringExt;
+
+    let path_buf = percent_decode(path.as_bytes()).collect::<Vec<u8>>();
+    let path_buf = OsString::from_vec(path_buf);
+    PathBuf::from(path_buf)
+}
+
+#[cfg(not(unix))]
+#[inline]
+pub(crate) fn decode_path(path: &str) -> PathBuf {
+    let path_buf = percent_decode(path.as_bytes()).collect::<Vec<u8>>();
+    let path_buf = String::from_utf8_lossy(&path_buf).into_owned();
+    PathBuf::from(path_buf)
 }

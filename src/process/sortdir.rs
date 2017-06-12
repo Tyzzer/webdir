@@ -1,16 +1,14 @@
 use std::{ io, fmt };
-use std::ops::Add;
 use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::path::{ PathBuf, Path };
 use std::fs::{ DirEntry, ReadDir, Metadata };
-use std::os::unix::ffi::OsStrExt;
-use url::percent_encoding;
 use maud::{ Render, Markup };
 use chrono::{ TimeZone, UTC };
 use humanesort::HumaneOrder;
+use ::utils::encode_path;
 
 
 pub type IoRREntry = io::Result<io::Result<Entry>>;
@@ -117,11 +115,7 @@ impl Entry {
         };
 
         let uri = path.strip_prefix(base)
-            .map(|p| percent_encoding::percent_encode(
-                p.as_os_str().as_bytes(),
-                percent_encoding::DEFAULT_ENCODE_SET
-            ))
-            .map(|p| p.fold(String::from("/"), Add::add))
+            .map(encode_path)
             .map(|p| if metadata.is_dir() { p + "/" } else { p })
             .ok();
 
