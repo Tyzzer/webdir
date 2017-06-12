@@ -44,6 +44,3 @@ maud_macros = "*"
 slog = "2.0.0"
 slog-async = "2.0.0"
 slog-term = "2.0.0"
-
-[dev-dependencies]
-tempdir = "*"

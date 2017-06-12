@@ -1,8 +1,11 @@
 mod sortdir;
 mod entity;
+
+// #[cfg_attr(unix, path = "async_file.rs")]
 mod file;
 
 use std::io;
+use std::ops::Range;
 use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
 use futures::{ stream, Stream, Future };
@@ -92,8 +95,8 @@ impl<'a> Process<'a> {
                 ))
                 .with_body(Body::empty())
             ),
-            EntifyResult::None => unimplemented!(),
-            EntifyResult::One(range) => unimplemented!(),
+            EntifyResult::None => self.send(&entity, None),
+            EntifyResult::One(range) => self.send(&entity, Some(range)),
             EntifyResult::Vec(ranges) => {
                 let handle = self.httpd.remote.handle()
                     .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
@@ -105,7 +108,7 @@ impl<'a> Process<'a> {
                 res.set_body(body);
 
                 let done = stream::iter::<_, _, error::Error>(ranges.into_iter().map(Ok))
-                    .map(move |range| fd.read(range))
+                    .and_then(move |range| fd.read(range).map_err(Into::into)) // TODO multipart support
                     .flatten()
                     .forward(send)
                     .map(drop)
@@ -116,5 +119,26 @@ impl<'a> Process<'a> {
                 Ok(res)
             }
         }
+    }
+
+    fn send(&self, entity: &Entity, range: Option<Range<u64>>) -> io::Result<Response> {
+        let range = range.unwrap_or_else(|| 0..entity.len());
+        let handle = self.httpd.remote.handle()
+            .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
+
+        let log = self.log.clone();
+        let fd = entity.open(handle)?;
+        let mut res = Response::new();
+        let (send, body) = Body::pair();
+        res.set_body(body);
+
+        let done = fd.read(range)?
+            .forward(send)
+            .map(drop)
+            .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
+
+        self.httpd.remote.spawn(move |_| done);
+
+        Ok(res)
     }
 }

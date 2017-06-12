@@ -1,4 +1,4 @@
-use std::{ io, cmp };
+use std::{ io, cmp, fs };
 use std::ops::Range;
 use std::hash::Hasher;
 use std::path::Path;
@@ -35,6 +35,11 @@ pub enum EntifyResult {
 impl<'a> Entity<'a> {
     pub fn new(path: &'a Path, metadata: &'a Metadata, log: &'a Logger) -> Self {
         Entity { path, metadata, log, etag: Self::etag(metadata) }
+    }
+
+    #[inline]
+    pub fn len(&self) -> u64 {
+        self.metadata.len()
     }
 
     #[cfg(unix)]
@@ -77,8 +82,9 @@ impl<'a> Entity<'a> {
         )
     }
 
-    pub fn open(&self, _handle: Handle) -> io::Result<file::File> {
-        Ok(file::File)
+    pub fn open(&self, handle: Handle) -> io::Result<file::File> {
+        let fd = fs::File::open(&self.path)?;
+        file::File::new(fd, handle)
     }
 
     pub fn headers(self, is_multipart: bool) -> Headers {
@@ -89,11 +95,12 @@ impl<'a> Entity<'a> {
         headers.set(header::ETag(self.etag));
 
         if is_multipart {
+            // TODO https://github.com/hyperium/mime/issues/52
             let mime = format!("multipart/byteranges; boundary={}", BOUNDARY).parse().unwrap();
             headers.set(header::ContentType(mime));
         } else {
             // TODO https://github.com/abonander/mime_guess/pull/24
-//            headers.set(header::ContentType(guess_mime_type(&self.path)));
+            // headers.set(header::ContentType(guess_mime_type(&self.path)));
         }
 
         if let Ok(date) = self.metadata.modified() {
