@@ -11,12 +11,10 @@ use smallvec::SmallVec;
 use mime_guess::guess_mime_type;
 use metrohash::MetroHash;
 use data_encoding::base64url;
-use ::response::{ fail, not_modified };
+use ::response::{ BOUNDARY, fail, not_modified };
 use ::utils::u64_to_bytes;
 use super::file;
 
-
-pub const BOUNDARY: &str = env!("CARGO_PKG_NAME");
 
 pub struct Entity<'a> {
     path: &'a Path,
@@ -100,6 +98,8 @@ impl<'a> Entity<'a> {
         } else {
             // TODO https://github.com/abonander/mime_guess/pull/24
             // headers.set(header::ContentType(guess_mime_type(&self.path)));
+
+            headers.set(header::ContentType(::mime::APPLICATION_OCTET_STREAM));
         }
 
         if let Ok(date) = self.metadata.modified() {

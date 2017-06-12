@@ -112,17 +112,48 @@ impl<'a> Process<'a> {
                     )
             },
             EntifyResult::Vec(ranges) => {
+                const BOUNDARY_LINE: &str = concat!("--", boundary!(), "\r\n");
+
                 let handle = self.httpd.remote.handle()
                     .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
 
+                let mut res = Response::new();
+
+                if self.req.method() == &Head {
+                    return Ok(res
+                        .with_status(StatusCode::PartialContent)
+                        .with_headers(entity.headers(true))
+                        .with_body(Body::empty())
+                    );
+                }
+
                 let log = self.log.clone();
                 let fd = entity.open(handle)?;
-                let mut res = Response::new();
                 let (send, body) = Body::pair();
                 res.set_body(body);
 
+                // TODO
+                // let content_type = header::ContentType(guess_mime_type(&entity.path));
+                let content_type = header::ContentType(::mime::APPLICATION_OCTET_STREAM);
+
                 let done = stream::iter::<_, _, error::Error>(ranges.into_iter().map(Ok))
-                    .and_then(move |range| fd.read(range).map_err(Into::into)) // TODO multipart support
+                    .and_then(move |range| {
+                        let len = range.end - range.start;
+                        let mut headers = header::Headers::new();
+                        headers.set(content_type.clone());
+                        headers.set(header::ContentRange(header::ContentRangeSpec::Bytes {
+                            range: Some((range.start, range.end - 1)), instance_length: Some(len)
+                        }));
+
+                        fd.read(range)
+                            .map(move |fut| {
+                                stream::once(Ok(Ok(BOUNDARY_LINE.into())))
+                                    .chain(stream::once(Ok(Ok(format!("{}\r\n", headers).into()))))
+                                    .chain(fut)
+                                    .chain(stream::once(Ok(Ok("\r\n".into()))))
+                            })
+                            .map_err(Into::into)
+                    })
                     .flatten()
                     .forward(send)
                     .map(drop)
@@ -130,7 +161,10 @@ impl<'a> Process<'a> {
 
                 self.httpd.remote.spawn(move |_| done);
 
-                Ok(res)
+                Ok(res
+                    .with_status(StatusCode::PartialContent)
+                    .with_headers(entity.headers(true))
+                )
             }
         }
     }

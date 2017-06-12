@@ -4,6 +4,10 @@ use std::path::{ Path, PathBuf, Component };
 use url::percent_encoding::{ DEFAULT_ENCODE_SET, percent_encode, percent_decode };
 
 
+macro_rules! boundary {
+    () => { env!("CARGO_PKG_NAME") }
+}
+
 #[macro_export]
 macro_rules! err {
     ( os $number:expr ) => {
