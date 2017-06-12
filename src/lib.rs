@@ -60,6 +60,7 @@ impl Service for Httpd {
             "path" => req.path(),
             "method" => format_args!("{}", req.method())
         );
+        debug!(self.log, "request"; "headers" => format_args!("{:?}", req.headers()));
 
         match Process::new(self, &self.log, &req).process() {
             Ok(res) => future::ok(res),

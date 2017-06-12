@@ -90,7 +90,6 @@ impl<'a> Entity<'a> {
     pub fn headers(self, is_multipart: bool) -> Headers {
         let mut headers = Headers::new();
 
-        headers.set(header::ContentLength(self.metadata.len()));
         headers.set(header::AcceptRanges(vec![header::RangeUnit::Bytes]));
         headers.set(header::ETag(self.etag));
 

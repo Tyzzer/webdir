@@ -9,7 +9,7 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
 use futures::{ stream, Stream, Future };
-use hyper::{ header, Request, Response, Head, Body };
+use hyper::{ header, Request, Response, Head, Body, StatusCode };
 use maud::Render;
 use slog::Logger;
 use ::utils::{ path_canonicalize, decode_path };
@@ -80,7 +80,9 @@ impl<'a> Process<'a> {
             self.httpd.remote.spawn(move |_| done);
         }
 
-        Ok(res.with_header(header::ContentType::html()))
+        // TODO https://github.com/hyperium/mime/issues/52
+        let mime = "text/html; charset=utf-8".parse().unwrap();
+        Ok(res.with_header(header::ContentType(mime)))
     }
 
     fn process_file(&self, metadata: &Metadata) -> io::Result<Response> {
@@ -88,15 +90,27 @@ impl<'a> Process<'a> {
 
         match entity.check(self.req.headers()) {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
-            ref result if self.req.method() == &Head => Ok(Response::new()
-                .with_headers(entity.headers(
-                    if let EntifyResult::Vec(_) = *result { true }
-                    else { false }
-                ))
-                .with_body(Body::empty())
-            ),
-            EntifyResult::None => self.send(&entity, None),
-            EntifyResult::One(range) => self.send(&entity, Some(range)),
+            EntifyResult::None => {
+                let len = entity.len();
+                self.send(&entity, None)
+                    .map(|res| res
+                        .with_headers(entity.headers(false))
+                        .with_header(header::ContentLength(len))
+                    )
+            },
+            EntifyResult::One(range) => {
+                debug!(self.log, "process"; "range" => format_args!("{:?}", range));
+                let len = entity.len();
+                self.send(&entity, Some(range.clone()))
+                    .map(|res| res
+                         .with_status(StatusCode::PartialContent)
+                         .with_headers(entity.headers(false))
+                         .with_header(header::ContentLength(range.end - range.start))
+                         .with_header(header::ContentRange(header::ContentRangeSpec::Bytes {
+                            range: Some((range.start, range.end - 1)), instance_length: Some(len)
+                        }))
+                    )
+            },
             EntifyResult::Vec(ranges) => {
                 let handle = self.httpd.remote.handle()
                     .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
@@ -122,22 +136,27 @@ impl<'a> Process<'a> {
     }
 
     fn send(&self, entity: &Entity, range: Option<Range<u64>>) -> io::Result<Response> {
-        let range = range.unwrap_or_else(|| 0..entity.len());
-        let handle = self.httpd.remote.handle()
-            .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
-
-        let log = self.log.clone();
-        let fd = entity.open(handle)?;
         let mut res = Response::new();
-        let (send, body) = Body::pair();
-        res.set_body(body);
 
-        let done = fd.read(range)?
-            .forward(send)
-            .map(drop)
-            .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
+        if self.req.method() == &Head {
+            res.set_body(Body::empty());
+        } else {
+            let range = range.unwrap_or_else(|| 0..entity.len());
+            let handle = self.httpd.remote.handle()
+                .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
 
-        self.httpd.remote.spawn(move |_| done);
+            let log = self.log.clone();
+            let fd = entity.open(handle)?;
+            let (send, body) = Body::pair();
+            res.set_body(body);
+
+            let done = fd.read(range)?
+                .forward(send)
+                .map(drop)
+                .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
+
+            self.httpd.remote.spawn(move |_| done);
+        }
 
         Ok(res)
     }
