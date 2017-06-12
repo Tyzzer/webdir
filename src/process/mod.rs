@@ -76,7 +76,7 @@ impl<'a> Process<'a> {
                 .chain(stream::once(Ok(Ok(HTML_FOOTER.into()))))
                 .map_err(error::Error::from)
                 .forward(send)
-                .map(|_| ())
+                .map(drop)
                 .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
 
             self.httpd.remote.spawn(move |_| done);
@@ -103,6 +103,7 @@ impl<'a> Process<'a> {
                 let handle = self.httpd.remote.handle()
                     .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
 
+                let log = self.log.clone();
                 let fd = entity.open(handle)?;
                 let mut res = Response::new();
                 let (send, body) = Body::pair();
@@ -112,8 +113,8 @@ impl<'a> Process<'a> {
                     .map(move |range| fd.read(range))
                     .flatten()
                     .forward(send)
-                    .map(|_| ())
-                    .map_err(|_| ());
+                    .map(drop)
+                    .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
 
                 self.httpd.remote.spawn(move |_| done);
 

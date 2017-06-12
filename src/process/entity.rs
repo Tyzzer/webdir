@@ -61,9 +61,11 @@ impl<'a> Entity<'a> {
         headers.set(header::ETag(self.etag));
 
         if is_multipart {
-            headers.set_raw("Content-Type", format!("multipart/byteranges; boundary={}", BOUNDARY));
+            let mime = format!("multipart/byteranges; boundary={}", BOUNDARY).parse().unwrap();
+            headers.set(header::ContentType(mime));
         } else {
-            headers.set(header::ContentType(guess_mime_type(&self.path)));
+            // TODO https://github.com/abonander/mime_guess/pull/24
+//            headers.set(header::ContentType(guess_mime_type(&self.path)));
         }
 
         if let Ok(date) = self.metadata.modified() {

@@ -1,11 +1,11 @@
 [package]
-name = "rshttpd"
+name = "webdir"
 version = "0.1.0"
 authors = ["quininer kel <quininer@live.com>"]
 
 [[bin]]
-name = "rshttpd"
-path = "src/bin/rshttpd.rs"
+name = "webdir"
+path = "src/bin/webdir.rs"
 doc = false
 
 [dependencies]
@@ -36,6 +36,7 @@ humansize = "*"
 humanesort = "0.1.0-alpha"
 data-encoding = "*"
 metrohash = "*"
+mime = "*"
 mime_guess = "*"
 maud = "*"
 maud_macros = "*"

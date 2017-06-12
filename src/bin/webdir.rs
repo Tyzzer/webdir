@@ -12,7 +12,7 @@ extern crate hyper;
 extern crate tokio_core;
 extern crate rustls;
 extern crate tokio_rustls;
-#[macro_use] extern crate rshttpd;
+#[macro_use] extern crate webdir;
 
 use std::env;
 use std::fs::File;
@@ -31,7 +31,7 @@ use tokio_core::net::TcpListener;
 use rustls::{ Certificate, PrivateKey, ServerConfig, ServerSessionMemoryCache };
 use rustls::internal::pemfile::{ certs, rsa_private_keys };
 use tokio_rustls::ServerConfigExt;
-use rshttpd::Httpd;
+use webdir::Httpd;
 
 
 #[derive(StructOpt)]

@@ -13,6 +13,7 @@ extern crate maud;
 extern crate chrono;
 extern crate humansize;
 extern crate humanesort;
+extern crate mime;
 extern crate mime_guess;
 extern crate metrohash;
 extern crate data_encoding;
