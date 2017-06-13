@@ -10,6 +10,7 @@ use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
 use futures::{ stream, Stream, Future };
 use hyper::{ header, Request, Response, Head, Body, StatusCode };
+use mime_guess::guess_mime_type;
 use maud::Render;
 use slog::Logger;
 use ::utils::{ path_canonicalize, decode_path };
@@ -75,7 +76,7 @@ impl<'a> Process<'a> {
                 .map_err(error::Error::from)
                 .forward(send)
                 .map(drop)
-                .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
+                .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
 
             self.httpd.remote.spawn(move |_| done);
         }
@@ -114,9 +115,10 @@ impl<'a> Process<'a> {
             EntifyResult::Vec(ranges) => {
                 const BOUNDARY_LINE: &str = concat!("--", boundary!(), "\r\n");
 
+                debug!(self.log, "process"; "ranges" => format_args!("{:?}", ranges));
+
                 let handle = self.httpd.remote.handle()
                     .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
-
                 let mut res = Response::new();
 
                 if self.req.method() == &Head {
@@ -133,8 +135,8 @@ impl<'a> Process<'a> {
                 res.set_body(body);
 
                 // TODO
-                // let content_type = header::ContentType(guess_mime_type(&entity.path));
-                let content_type = header::ContentType(::mime::APPLICATION_OCTET_STREAM);
+                let mime = guess_mime_type(&self.path).to_string().parse().unwrap();
+                let content_type = header::ContentType(mime);
 
                 let done = stream::iter::<_, _, error::Error>(ranges.into_iter().map(Ok))
                     .and_then(move |range| {
@@ -157,7 +159,7 @@ impl<'a> Process<'a> {
                     .flatten()
                     .forward(send)
                     .map(drop)
-                    .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
+                    .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
 
                 self.httpd.remote.spawn(move |_| done);
 
@@ -187,7 +189,7 @@ impl<'a> Process<'a> {
             let done = fd.read(range)?
                 .forward(send)
                 .map(drop)
-                .map_err(move |err| error!(log, "error"; "err" => format_args!("{}", err)));
+                .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
 
             self.httpd.remote.spawn(move |_| done);
         }

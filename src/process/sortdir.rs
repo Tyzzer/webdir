@@ -12,7 +12,7 @@ use ::utils::encode_path;
 
 
 pub type IoRREntry = io::Result<io::Result<Entry>>;
-const SORTDIR_BUFF_LENGTH: usize = 100;
+pub const SORTDIR_BUFF_LENGTH: usize = 100;
 
 pub struct SortDir {
     root: Arc<PathBuf>,
@@ -25,7 +25,10 @@ impl SortDir {
         fn sort_by_entry(x: &IoRREntry, y: &IoRREntry) -> Ordering {
             if let (&Ok(Ok(ref x)), &Ok(Ok(ref y))) = (x, y) {
                 match Ord::cmp(&x.ty, &y.ty) {
-                    Ordering::Equal => HumaneOrder::humane_cmp(&x.name.to_string_lossy(), &y.name.to_string_lossy()),
+                    Ordering::Equal => HumaneOrder::humane_cmp(
+                        &x.name.to_string_lossy(),
+                        &y.name.to_string_lossy()
+                    ),
                     order => order
                 }
             } else {

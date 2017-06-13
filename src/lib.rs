@@ -51,8 +51,8 @@ impl Service for Httpd {
     fn call(&self, req: Request) -> Self::Future {
         if ![Get, Head].contains(req.method()) {
             return future::ok(
-                response::fail(&self.log, false, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
-                    .with_header(header::Allow(vec![Get]))
+                response::fail(&self.log, true, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
+                    .with_header(header::Allow(vec![Head, Get]))
             );
         }
 

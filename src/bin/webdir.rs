@@ -101,7 +101,7 @@ fn start(config: Config) -> io::Result<()> {
                 .map(move |stream| Http::new()
                     .bind_connection(&handle2, stream, addr, httpd)
                 )
-                .map_err(move |err| error!(log, "tls"; "error" => format_args!("{}", err)));
+                .map_err(move |err| error!(log, "tls"; "err" => format_args!("{}", err)));
 
             handle.spawn(done);
         } else {

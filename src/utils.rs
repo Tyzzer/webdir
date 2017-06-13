@@ -113,10 +113,7 @@ pub(crate) fn encode_path(path: &Path) -> String {
 #[cfg(not(unix))]
 #[inline]
 pub(crate) fn encode_path(path: &Path) -> String {
-    let p = path.to_string_lossy();
-    let p = p.as_bytes();
-
-    percent_encode(p, DEFAULT_ENCODE_SET)
+    percent_encode(path.to_string_lossy().as_bytes(), DEFAULT_ENCODE_SET)
         .fold(String::from("/"), Add::add)
 }
 

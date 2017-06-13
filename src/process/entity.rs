@@ -97,9 +97,9 @@ impl<'a> Entity<'a> {
             headers.set(header::ContentType(mime));
         } else {
             // TODO https://github.com/abonander/mime_guess/pull/24
-            // headers.set(header::ContentType(guess_mime_type(&self.path)));
 
-            headers.set(header::ContentType(::mime::APPLICATION_OCTET_STREAM));
+            let mime = guess_mime_type(&self.path).to_string().parse().unwrap();
+            headers.set(header::ContentType(mime));
         }
 
         if let Ok(date) = self.metadata.modified() {
