@@ -8,20 +8,22 @@ use hyper;
 use ::error;
 
 
-pub const CHUNK_BUFF_LENGTH: usize = 4096;
+pub const CHUNK_BUFF_LENGTH: usize = 1 << 16;
 
 pub struct File {
-    fd: fs::File
+    fd: fs::File,
+    len: usize
 }
 
 impl File {
-    pub fn new(fd: fs::File, _handle: Handle) -> io::Result<Self> {
-        Ok(File { fd })
+    #[inline]
+    pub fn new(fd: fs::File, _handle: Handle, len: usize) -> io::Result<Self> {
+        Ok(File { fd, len })
     }
 
     pub fn read(&self, range: Range<u64>) -> io::Result<ReadFut> {
         let fd = self.fd.try_clone()?;
-        let buf = Box::new([0; CHUNK_BUFF_LENGTH]);
+        let buf = vec![0; cmp::min(CHUNK_BUFF_LENGTH, self.len)];
 
         Ok(ReadFut { fd, range, buf })
     }
@@ -30,7 +32,7 @@ impl File {
 pub struct ReadFut {
     fd: fs::File,
     range: Range<u64>,
-    buf: Box<[u8; CHUNK_BUFF_LENGTH]>
+    buf: Vec<u8>
 }
 
 impl Stream for ReadFut {
@@ -38,7 +40,7 @@ impl Stream for ReadFut {
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let read_len = cmp::min((self.range.end - self.range.start) as _, CHUNK_BUFF_LENGTH);
+        let read_len = cmp::min((self.range.end - self.range.start) as _, self.buf.len());
 
         if read_len > 0 {
             let mut window = Window::new(&mut self.buf[..]);

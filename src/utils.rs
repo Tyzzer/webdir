@@ -30,13 +30,12 @@ macro_rules! err {
 }
 
 macro_rules! chunk {
-    ( ok $chunk:expr ) => {
-        Ok(chunk!($chunk))
+    ( into $chunk:expr ) => {
+        Ok(::hyper::Chunk::from($chunk.into_string()))
     };
-
     ( $chunk:expr ) => {
-        ::hyper::Chunk::from($chunk.into_string())
-    }
+        Ok(::hyper::Chunk::from($chunk))
+    };
 }
 
 pub(crate) fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {

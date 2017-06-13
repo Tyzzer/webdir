@@ -28,12 +28,14 @@ pub struct Process<'a> {
 }
 
 impl<'a> Process<'a> {
+    #[inline]
     pub fn new(httpd: &'a Httpd, log: &'a Logger, req: &'a Request) -> Process<'a> {
         let path_buf = decode_path(req.path());
         let (depth, path) = path_canonicalize(&httpd.root, path_buf);
         Process { httpd, log, req, depth, path }
     }
 
+    #[inline]
     pub fn process(&self) -> io::Result<Response> {
         let metadata = self.path.metadata()?;
 
@@ -67,12 +69,12 @@ impl<'a> Process<'a> {
             let (send, body) = Body::pair();
             res.set_body(body);
 
-            let done = stream::once(Ok(Ok(HTML_HEADER.into())))
-                .chain(stream::once(Ok(chunk!(ok up(is_root)))))
+            let done = stream::once(Ok(chunk!(HTML_HEADER)))
+                .chain(stream::once(Ok(chunk!(into up(is_root)))))
                 .chain(stream::iter(SortDir::new(root, dir))
-                    .map(|p| p.map(|m| chunk!(m.render())).map_err(Into::into))
+                    .map(|p| p.and_then(|m| chunk!(into m.render())).map_err(Into::into))
                 )
-                .chain(stream::once(Ok(Ok(HTML_FOOTER.into()))))
+                .chain(stream::once(Ok(chunk!(HTML_FOOTER))))
                 .map_err(error::Error::from)
                 .forward(send)
                 .map(drop)
@@ -149,10 +151,10 @@ impl<'a> Process<'a> {
 
                         fd.read(range)
                             .map(move |fut| {
-                                stream::once(Ok(Ok(BOUNDARY_LINE.into())))
-                                    .chain(stream::once(Ok(Ok(format!("{}\r\n", headers).into()))))
+                                stream::once(Ok(chunk!(BOUNDARY_LINE)))
+                                    .chain(stream::once(Ok(chunk!(format!("{}\r\n", headers)))))
                                     .chain(fut)
-                                    .chain(stream::once(Ok(Ok("\r\n".into()))))
+                                    .chain(stream::once(Ok(chunk!("\r\n"))))
                             })
                             .map_err(Into::into)
                     })

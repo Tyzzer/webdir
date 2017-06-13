@@ -20,6 +20,7 @@ pub struct Entity<'a> {
     path: &'a Path,
     metadata: &'a Metadata,
     log: &'a Logger,
+    len: u64,
     etag: header::EntityTag
 }
 
@@ -32,21 +33,22 @@ pub enum EntifyResult {
 
 impl<'a> Entity<'a> {
     pub fn new(path: &'a Path, metadata: &'a Metadata, log: &'a Logger) -> Self {
-        Entity { path, metadata, log, etag: Self::etag(metadata) }
+        let len = metadata.len();
+        Entity { path, metadata, log, len, etag: Self::etag(len, metadata) }
     }
 
     #[inline]
     pub fn len(&self) -> u64 {
-        self.metadata.len()
+        self.len
     }
 
     #[cfg(unix)]
-    fn etag(metadata: &Metadata) -> header::EntityTag {
+    fn etag(len: u64, metadata: &Metadata) -> header::EntityTag {
         use std::os::unix::fs::MetadataExt;
 
         let mut hasher = MetroHash::default();
+        hasher.write_u64(len);
         hasher.write_u64(metadata.ino());
-        hasher.write_u64(metadata.len());
         hasher.write_i64(metadata.mtime());
         hasher.write_i64(metadata.mtime_nsec());
         header::EntityTag::strong(
@@ -55,13 +57,13 @@ impl<'a> Entity<'a> {
     }
 
     #[cfg(not(unix))]
-    fn etag(metadata: &Metadata) -> header::EntityTag {
+    fn etag(len: u64, metadata: &Metadata) -> header::EntityTag {
         use std::hash::Hash;
         use std::time::UNIX_EPOCH;
 
         let mut hasher = MetroHash::default();
         metadata.file_type().hash(&mut hasher);
-        metadata.len().hash(&mut hasher);
+        len.hash(&mut hasher);
 
         if let Ok(time) = metadata.created() {
             if let Ok(time) = time.duration_since(UNIX_EPOCH) {
@@ -80,9 +82,10 @@ impl<'a> Entity<'a> {
         )
     }
 
+    #[inline]
     pub fn open(&self, handle: Handle) -> io::Result<file::File> {
         let fd = fs::File::open(&self.path)?;
-        file::File::new(fd, handle)
+        file::File::new(fd, handle, self.len as _)
     }
 
     pub fn headers(self, is_multipart: bool) -> Headers {
@@ -97,7 +100,6 @@ impl<'a> Entity<'a> {
             headers.set(header::ContentType(mime));
         } else {
             // TODO https://github.com/abonander/mime_guess/pull/24
-
             let mime = guess_mime_type(&self.path).to_string().parse().unwrap();
             headers.set(header::ContentType(mime));
         }
@@ -134,7 +136,7 @@ impl<'a> Entity<'a> {
         }
 
         if let Some(&header::Range::Bytes(ref ranges)) = headers.get::<header::Range>() {
-            let length = self.metadata.len();
+            let length = self.len;
             let mut vec = SmallVec::<[_; 1]>::new();
 
             for range in ranges {
@@ -158,9 +160,9 @@ impl<'a> Entity<'a> {
                     }))
                 )
             } else if vec.len() == 1 {
-                EntifyResult::One(vec.remove(0))
+                EntifyResult::One(vec.pop().unwrap())
             } else {
-                EntifyResult::Vec(vec.into_iter().collect())
+                EntifyResult::Vec(vec.into_vec())
             }
         } else {
             EntifyResult::None

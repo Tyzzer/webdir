@@ -99,6 +99,7 @@ fn start(config: Config) -> io::Result<()> {
 
             let done = tls_config.accept_async(stream)
                 .map(move |stream| Http::new()
+                    .keep_alive(true)
                     .bind_connection(&handle2, stream, addr, httpd)
                 )
                 .map_err(move |err| error!(log, "tls"; "err" => format_args!("{}", err)));
