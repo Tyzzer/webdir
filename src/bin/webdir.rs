@@ -50,7 +50,7 @@ struct Config {
     session_buff: Option<usize>,
 
     #[serde(skip_serializing)]
-    #[structopt(short = "c", long = "config", help = "Read config from File")]
+    #[structopt(short = "c", long = "config", help = "read config from File")]
     config: Option<String>
 }
 

@@ -2,6 +2,11 @@
 name = "webdir"
 version = "0.1.0"
 authors = ["quininer kel <quininer@live.com>"]
+license = "MIT"
+repository = "https://github.com/Tyzzer/webdir"
+homepage = "https://github.com/Tyzzer/webdir"
+readme = "README.md"
+description = "A simple asynchronous static file server"
 
 [[bin]]
 name = "webdir"
@@ -44,3 +49,6 @@ maud_macros = "0.16"
 slog = "2.0"
 slog-async = "2.0"
 slog-term = "2.0"
+
+[dev-dependencies]
+tempdir = "0.3"

@@ -197,3 +197,40 @@ impl<'a> Process<'a> {
         Ok(res)
     }
 }
+
+
+#[cfg(test)]
+mod test {
+    extern crate tempdir;
+
+    use std::fs;
+    use std::io::Write;
+    use futures::Stream;
+    use tokio_core::reactor::Core;
+    use self::tempdir::TempDir;
+    use super::file::*;
+
+    #[test]
+    fn test_file() {
+        let tmp = TempDir::new("webdir_test_file").unwrap();
+
+        {
+            fs::File::create(tmp.path().join("test")).unwrap()
+                .write_all(&[42; 1024]).unwrap();
+        }
+
+        let mut core = Core::new().unwrap();
+        let handle = core.handle();
+        let fd = fs::File::open(tmp.path().join("test")).unwrap();
+        let len = fd.metadata().unwrap().len();
+
+        let file = File::new(fd, handle, len as _).unwrap();
+        let fut = file.read(32..1021).unwrap()
+            .map(|chunk| chunk.unwrap().to_vec())
+            .concat2();
+
+        let output = core.run(fut).unwrap();
+
+        assert_eq!(output, &[42; 989][..]);
+    }
+}

@@ -135,3 +135,15 @@ pub(crate) fn decode_path(path: &str) -> PathBuf {
     let path_buf = String::from_utf8_lossy(&path_buf).into_owned();
     PathBuf::from(path_buf)
 }
+
+#[test]
+fn test_encode_path() {
+    assert_eq!(encode_path(Path::new("aaa/bbb")), "/aaa/bbb");
+    assert_eq!(encode_path(Path::new("aaa/中文")), "/aaa/%E4%B8%AD%E6%96%87");
+}
+
+#[test]
+fn test_decode_path() {
+    assert_eq!(decode_path("aaa/bbb"), Path::new("aaa/bbb"));
+    assert_eq!(decode_path("%E4%B8%AD%E6%96%87/bbb"), Path::new("中文/bbb"));
+}

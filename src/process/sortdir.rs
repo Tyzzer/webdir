@@ -180,3 +180,31 @@ pub fn up(top: bool) -> Markup {
         }
     }
 }
+
+
+#[cfg(test)]
+mod test {
+    extern crate tempdir;
+
+    use std::fs;
+    use std::sync::Arc;
+    use self::tempdir::TempDir;
+    use super::*;
+
+    #[test]
+    fn test_sortdir() {
+        let tmp = TempDir::new("webdir_test_sortdir").unwrap();
+        fs::create_dir(tmp.path().join("test")).unwrap();
+        fs::create_dir(tmp.path().join("test3")).unwrap();
+        fs::create_dir(tmp.path().join("test10")).unwrap();
+        fs::File::create(tmp.path().join("test1")).unwrap();
+        fs::File::create(tmp.path().join("test20")).unwrap();
+
+        let path = Arc::new(tmp.path().to_path_buf());
+        let readdir = path.read_dir().unwrap();
+        let output = SortDir::new(path, readdir)
+            .map(|entry| entry.unwrap().unwrap().name.to_string_lossy().into())
+            .collect::<Vec<String>>();
+        assert_eq!(output, ["test", "test3", "test10", "test1", "test20"]);
+    }
+}
