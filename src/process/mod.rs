@@ -136,9 +136,7 @@ impl<'a> Process<'a> {
                 let (send, body) = Body::pair();
                 res.set_body(body);
 
-                // TODO
-                let mime = guess_mime_type(&self.path).to_string().parse().unwrap();
-                let content_type = header::ContentType(mime);
+                let content_type = header::ContentType(guess_mime_type(&self.path));
 
                 let done = stream::iter::<_, _, error::Error>(ranges.into_iter().map(Ok))
                     .and_then(move |range| {

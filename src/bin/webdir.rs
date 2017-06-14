@@ -123,22 +123,24 @@ fn main() {
 
 #[inline]
 fn make_config() -> io::Result<Config> {
+    const CONFIG_NAME: &str = concat!(env!("CARGO_PKG_NAME"), ".toml");
+
     let mut args_config = Config::from_args();
 
     let maybe_config_path = args_config.config.as_ref()
         .map(PathBuf::from)
         .or_else(|| xdg::BaseDirectories::with_prefix(env!("CARGO_PKG_NAME"))
             .ok()
-            .and_then(|xdg| xdg.find_config_file(&concat!(env!("CARGO_PKG_NAME"), ".toml")))
+            .and_then(|xdg| xdg.find_config_file(CONFIG_NAME))
         )
         .or_else(|| xdg::BaseDirectories::new()
             .ok()
-            .and_then(|xdg| xdg.find_config_file(&concat!(env!("CARGO_PKG_NAME"), ".toml")))
+            .and_then(|xdg| xdg.find_config_file(CONFIG_NAME))
         )
         .or_else(|| env::var("HOME")
             .ok()
             .and_then(|home| {
-                let path = Path::new(&home).join(concat!(env!("CARGO_PKG_NAME"), ".toml"));
+                let path = Path::new(&home).join(CONFIG_NAME);
                 if path.is_file() {
                     Some(path)
                 } else {

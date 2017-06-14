@@ -99,9 +99,7 @@ impl<'a> Entity<'a> {
             let mime = format!("multipart/byteranges; boundary={}", BOUNDARY).parse().unwrap();
             headers.set(header::ContentType(mime));
         } else {
-            // TODO https://github.com/abonander/mime_guess/pull/24
-            let mime = guess_mime_type(&self.path).to_string().parse().unwrap();
-            headers.set(header::ContentType(mime));
+            headers.set(header::ContentType(guess_mime_type(&self.path)));
         }
 
         if let Ok(date) = self.metadata.modified() {
