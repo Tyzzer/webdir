@@ -189,12 +189,12 @@ impl<'a> Process<'a> {
 
             debug!(self.log, "process"; "method" => "sendfile");
 
-            let sendfile = fd.sendfile(range, socket.clone())?
+            let done = fd.sendfile(range, socket.clone())?
                 //              ^^^ FIXME not work for keepalive
                 .for_each(|_| future::empty())
                 .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
 
-            self.httpd.remote.spawn(move |_| sendfile);
+            self.httpd.remote.spawn(move |_| done);
         } else {
             let range = range.unwrap_or_else(|| 0..fd.len);
 

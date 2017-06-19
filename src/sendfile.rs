@@ -7,7 +7,6 @@ use futures::{ Poll, Stream, Async };
 use futures::sync::{ BiLock, BiLockAcquired };
 use tokio_io::{ AsyncRead, AsyncWrite };
 use tokio_core::net::TcpStream;
-use nix::sys::sendfile::sendfile;
 use nix;
 use ::error;
 
@@ -63,6 +62,13 @@ impl Stream for SendFileFut {
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
+        use nix::sys::sendfile::sendfile;
+
+        #[cfg(any(target_os = "macos", target_os = "ios"))]
+        use self::macos::sendfile;
+
+
         if self.count == 0 {
             return Ok(Async::Ready(None))
         }
@@ -91,6 +97,23 @@ impl Stream for SendFileFut {
                 Ok(Async::NotReady)
             },
             Err(err) => Err(err.into())
+        }
+    }
+}
+
+
+#[cfg(any(target_os = "macos", target_os = "ios"))]
+mod macos {
+    use std::ptr;
+    use std::os::unix::io::RawFd;
+    use libc::sendfile;
+
+    pub fn sendfile(out_fd: RawFd, in_fd: RawFd, offset: Option<&mut off_t>, count: usize) -> nix::Result<usize> {
+        let &mut offset = offset.unwrap_or(&mut 0);
+        let mut len = count;
+        match unsafe { sendfile(out_fd, in_fd, offset, &mut len, ptr::null_mut(), 0) } {
+            0 => Ok(count - len),
+            _ => Err(nix::Error::last())
         }
     }
 }
