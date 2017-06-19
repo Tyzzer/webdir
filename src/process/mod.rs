@@ -190,8 +190,8 @@ impl<'a> Process<'a> {
             debug!(self.log, "process"; "method" => "sendfile");
 
             let done = fd.sendfile(range, socket.clone())?
-                //              ^^^ FIXME not work for keepalive
-                .for_each(|_| future::empty())
+                .for_each(|_| future::ok(()))
+                .map(drop)
                 .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
 
             self.httpd.remote.spawn(move |_| done);
