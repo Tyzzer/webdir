@@ -106,13 +106,14 @@ impl Stream for SendFileFut {
 mod macos {
     use std::ptr;
     use std::os::unix::io::RawFd;
-    use libc::sendfile;
+    use libc::{ off_t, sendfile as raw_sendfile };
+    use nix;
 
     pub fn sendfile(out_fd: RawFd, in_fd: RawFd, offset: Option<&mut off_t>, count: usize) -> nix::Result<usize> {
         let &mut offset = offset.unwrap_or(&mut 0);
-        let mut len = count;
-        match unsafe { sendfile(out_fd, in_fd, offset, &mut len, ptr::null_mut(), 0) } {
-            0 => Ok(count - len),
+        let mut len = count as _;
+        match unsafe { raw_sendfile(out_fd, in_fd, offset, &mut len, ptr::null_mut(), 0) } {
+            0 => Ok(count - len as usize),
             _ => Err(nix::Error::last())
         }
     }
