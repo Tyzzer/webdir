@@ -1,7 +1,8 @@
 use std::{ io, cmp, fs };
+use std::rc::Rc;
 use std::ops::Range;
 use std::hash::Hasher;
-use std::path::Path;
+use std::path::PathBuf;
 use std::fs::Metadata;
 use tokio_core::reactor::Handle;
 use hyper::{ header, Headers, Response, StatusCode };
@@ -13,11 +14,11 @@ use metrohash::MetroHash;
 use data_encoding::base64url;
 use ::response::{ BOUNDARY, fail, not_modified };
 use ::utils::u64_to_bytes;
-use super::file;
+use ::file;
 
 
 pub struct Entity<'a> {
-    path: &'a Path,
+    path: Rc<PathBuf>,
     metadata: &'a Metadata,
     log: &'a Logger,
     len: u64,
@@ -32,14 +33,9 @@ pub enum EntifyResult {
 }
 
 impl<'a> Entity<'a> {
-    pub fn new(path: &'a Path, metadata: &'a Metadata, log: &'a Logger) -> Self {
+    pub fn new(path: Rc<PathBuf>, metadata: &'a Metadata, log: &'a Logger) -> Self {
         let len = metadata.len();
         Entity { path, metadata, log, len, etag: Self::etag(len, metadata) }
-    }
-
-    #[inline]
-    pub fn len(&self) -> u64 {
-        self.len
     }
 
     #[cfg(unix)]
@@ -84,8 +80,8 @@ impl<'a> Entity<'a> {
 
     #[inline]
     pub fn open(&self, handle: Handle) -> io::Result<file::File> {
-        let fd = fs::File::open(&self.path)?;
-        file::File::new(fd, handle, self.len as _)
+        let fd = fs::File::open(&*self.path)?;
+        file::File::new(fd, handle, self.len)
     }
 
     pub fn headers(self, is_multipart: bool) -> Headers {
@@ -99,7 +95,7 @@ impl<'a> Entity<'a> {
             let mime = format!("multipart/byteranges; boundary={}", BOUNDARY).parse().unwrap();
             headers.set(header::ContentType(mime));
         } else {
-            headers.set(header::ContentType(guess_mime_type(&self.path)));
+            headers.set(header::ContentType(guess_mime_type(&*self.path)));
         }
 
         if let Ok(date) = self.metadata.modified() {

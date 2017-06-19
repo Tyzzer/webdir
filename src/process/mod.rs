@@ -1,20 +1,18 @@
 mod sortdir;
 mod entity;
 
-// #[cfg_attr(unix, path = "async_file.rs")]
-mod file;
-
 use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
+use std::rc::Rc;
 use std::fs::{ Metadata, ReadDir };
-use futures::{ stream, Stream, Future };
+use futures::{ future, stream, Stream, Future };
 use hyper::{ header, Request, Response, Head, Body, StatusCode };
 use mime_guess::guess_mime_type;
 use maud::Render;
 use slog::Logger;
 use ::utils::{ path_canonicalize, decode_path };
-use ::{ error, Httpd };
+use ::{ error, file, Httpd };
 use self::sortdir::{ SortDir, up };
 use self::entity::{ Entity, EntifyResult };
 
@@ -24,7 +22,7 @@ pub struct Process<'a> {
     log: &'a Logger,
     req: &'a Request,
     depth: usize,
-    path: PathBuf
+    path: Rc<PathBuf>
 }
 
 impl<'a> Process<'a> {
@@ -32,11 +30,12 @@ impl<'a> Process<'a> {
     pub fn new(httpd: &'a Httpd, log: &'a Logger, req: &'a Request) -> Process<'a> {
         let path_buf = decode_path(req.path());
         let (depth, path) = path_canonicalize(&httpd.root, path_buf);
+        let path = Rc::new(path);
         Process { httpd, log, req, depth, path }
     }
 
     #[inline]
-    pub fn process(&self) -> io::Result<Response> {
+    pub fn process(&mut self) -> io::Result<Response> {
         let metadata = self.path.metadata()?;
 
         if let Ok(dir) = self.path.read_dir() {
@@ -88,29 +87,33 @@ impl<'a> Process<'a> {
         Ok(res.with_header(header::ContentType(mime)))
     }
 
-    fn process_file(&self, metadata: &Metadata) -> io::Result<Response> {
-        let entity = Entity::new(&self.path, metadata, self.log);
+    fn process_file(&mut self, metadata: &Metadata) -> io::Result<Response> {
+        let entity = Entity::new(self.path.clone(), metadata, self.log);
 
         match entity.check(self.req.headers()) {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
             EntifyResult::None => {
-                let len = entity.len();
-                self.send(&entity, None)
+                let handle = self.httpd.remote.handle()
+                    .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
+                let fd = entity.open(handle)?;
+                self.send(&fd, None)
                     .map(|res| res
                         .with_headers(entity.headers(false))
-                        .with_header(header::ContentLength(len))
+                        .with_header(header::ContentLength(fd.len))
                     )
             },
             EntifyResult::One(range) => {
                 debug!(self.log, "process"; "range" => format_args!("{:?}", range));
-                let len = entity.len();
-                self.send(&entity, Some(range.clone()))
+                let handle = self.httpd.remote.handle()
+                    .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
+                let fd = entity.open(handle)?;
+                self.send(&fd, Some(range.clone()))
                     .map(|res| res
                          .with_status(StatusCode::PartialContent)
                          .with_headers(entity.headers(false))
                          .with_header(header::ContentLength(range.end - range.start))
                          .with_header(header::ContentRange(header::ContentRangeSpec::Bytes {
-                            range: Some((range.start, range.end - 1)), instance_length: Some(len)
+                            range: Some((range.start, range.end - 1)), instance_length: Some(fd.len)
                         }))
                     )
             },
@@ -136,7 +139,7 @@ impl<'a> Process<'a> {
                 let (send, body) = Body::pair();
                 res.set_body(body);
 
-                let content_type = header::ContentType(guess_mime_type(&self.path));
+                let content_type = header::ContentType(guess_mime_type(&*self.path));
 
                 let done = stream::iter::<_, _, error::Error>(ranges.into_iter().map(Ok))
                     .and_then(move |range| {
@@ -171,20 +174,33 @@ impl<'a> Process<'a> {
         }
     }
 
-    fn send(&self, entity: &Entity, range: Option<Range<u64>>) -> io::Result<Response> {
+    fn send(&mut self, fd: &file::File, range: Option<Range<u64>>) -> io::Result<Response> {
+        use ::file::CHUNK_BUFF_LENGTH;
         let mut res = Response::new();
 
         if self.req.method() == &Head {
             res.set_body(Body::empty());
+        } else if let (Some(socket), true) = (self.httpd.socket.take().take(), CHUNK_BUFF_LENGTH >= fd.len as _) {
+                //                                              ^^^ FIXME not work for keepalive
+            let range = range.unwrap_or_else(|| 0..fd.len);
+            let log = self.log.clone();
+            res.set_body(Body::empty());
+
+            debug!(log, "process"; "method" => "sendfile");
+
+            let sendfile = fd.sendfile(range, socket.lock())?
+                .for_each(|_| future::empty())
+                .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
+
+            self.httpd.remote.spawn(move |_| sendfile);
         } else {
-            let range = range.unwrap_or_else(|| 0..entity.len());
-            let handle = self.httpd.remote.handle()
-                .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
+            let range = range.unwrap_or_else(|| 0..fd.len);
 
             let log = self.log.clone();
-            let fd = entity.open(handle)?;
             let (send, body) = Body::pair();
             res.set_body(body);
+
+            debug!(log, "process"; "method" => "readchunk");
 
             let done = fd.read(range)?
                 .forward(send)
@@ -195,42 +211,5 @@ impl<'a> Process<'a> {
         }
 
         Ok(res)
-    }
-}
-
-
-#[cfg(test)]
-mod test {
-    extern crate tempdir;
-
-    use std::fs;
-    use std::io::Write;
-    use futures::Stream;
-    use tokio_core::reactor::Core;
-    use self::tempdir::TempDir;
-    use super::file::*;
-
-    #[test]
-    fn test_file() {
-        let tmp = TempDir::new("webdir_test_file").unwrap();
-
-        {
-            fs::File::create(tmp.path().join("test")).unwrap()
-                .write_all(&[42; 1024]).unwrap();
-        }
-
-        let mut core = Core::new().unwrap();
-        let handle = core.handle();
-        let fd = fs::File::open(tmp.path().join("test")).unwrap();
-        let len = fd.metadata().unwrap().len();
-
-        let file = File::new(fd, handle, len as _).unwrap();
-        let fut = file.read(32..1021).unwrap()
-            .map(|chunk| chunk.unwrap().to_vec())
-            .concat2();
-
-        let output = core.run(fut).unwrap();
-
-        assert_eq!(output, &[42; 989][..]);
     }
 }

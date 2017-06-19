@@ -17,6 +17,7 @@ extern crate tokio_rustls;
 use std::env;
 use std::fs::File;
 use std::sync::Arc;
+use std::cell::Cell;
 use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
 use std::path::{ Path, PathBuf };
 use std::io::{ self, Read, BufReader };
@@ -25,13 +26,14 @@ use slog_term::{ CompactFormat, TermDecorator };
 use slog_async::Async;
 use structopt::StructOpt;
 use futures::{ Future, Stream };
+use futures::sync::BiLock;
 use hyper::server::Http;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
 use rustls::{ Certificate, PrivateKey, ServerConfig, ServerSessionMemoryCache };
 use rustls::internal::pemfile::{ certs, rsa_private_keys };
 use tokio_rustls::ServerConfigExt;
-use webdir::Httpd;
+use webdir::{ Httpd, BiStream };
 
 
 #[derive(StructOpt)]
@@ -87,12 +89,18 @@ fn start(config: Config) -> io::Result<()> {
 
     info!(log, "listening";
         "root" => format_args!("{}", root.display()),
-        "listen" => format_args!("{}", listener.local_addr()?)
+        "listen" => format_args!("{}", listener.local_addr()?),
+        "tls" => maybe_tls_config.is_some()
     );
 
     let done = listener.incoming().for_each(|(stream, addr)| {
         let log = log.new(o!("addr" => format!("{}", addr)));
-        let httpd = Httpd::new(remote.clone(), log.clone(), root.clone());
+        let mut httpd = Httpd {
+            remote: remote.clone(),
+            root: root.clone(),
+            log: log.clone(),
+            socket: Cell::new(None)
+        };
 
         if let Some(ref tls_config) = maybe_tls_config {
             let handle2 = handle.clone();
@@ -106,7 +114,17 @@ fn start(config: Config) -> io::Result<()> {
 
             handle.spawn(done);
         } else {
-            Http::new().bind_connection(&handle, stream, addr, httpd);
+            let (stream1, stream2) = BiLock::new(stream);
+            let handle2 = handle.clone();
+            httpd.socket = Cell::new(Some(stream2));
+
+            let done = stream1.lock()
+                .map(BiStream)
+                .map(move |stream| Http::new()
+                    .keep_alive(false)
+                    .bind_connection(&handle2, stream, addr, httpd)
+                );
+            handle.spawn(done);
         }
 
         Ok(())
@@ -115,11 +133,6 @@ fn start(config: Config) -> io::Result<()> {
     core.run(done)
 }
 
-
-fn main() {
-    let config = make_config().unwrap();
-    start(config).unwrap();
-}
 
 #[inline]
 fn make_config() -> io::Result<Config> {
@@ -188,4 +201,10 @@ fn load_certs(path: &str) -> io::Result<Vec<Certificate>> {
 fn load_keys(path: &str) -> io::Result<Vec<PrivateKey>> {
     rsa_private_keys(&mut BufReader::new(File::open(path)?))
         .map_err(|_| err!(Other, "Not found keys"))
+}
+
+
+fn main() {
+    let config = make_config().unwrap();
+    start(config).unwrap();
 }

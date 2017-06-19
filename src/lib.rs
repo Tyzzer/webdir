@@ -3,9 +3,11 @@
 
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate slog;
+#[macro_use] extern crate futures;
 extern crate url;
+extern crate nix;
+extern crate libc;
 extern crate bytes;
-extern crate futures;
 extern crate tokio_io;
 extern crate tokio_core;
 extern crate hyper;
@@ -21,25 +23,31 @@ extern crate smallvec;
 
 #[macro_use] mod utils;
 pub mod error;
+mod file;
+mod sendfile;
 mod response;
 mod process;
 
 use std::io;
 use std::sync::Arc;
+use std::cell::Cell;
 use std::path::PathBuf;
 use futures::future::{ self, FutureResult };
+use futures::sync::BiLock;
+use tokio_core::net::TcpStream;
 use tokio_core::reactor::Remote;
 use hyper::{ header, Get, Head, StatusCode };
 use hyper::server::{ Service, Request, Response };
 use slog::Logger;
 use process::Process;
+pub use sendfile::BiStream;
 
 
-#[derive(Debug, Clone)]
 pub struct Httpd {
     pub remote: Remote,
     pub root: Arc<PathBuf>,
-    pub log: Logger
+    pub log: Logger,
+    pub socket: Cell<Option<BiLock<TcpStream>>>,
 }
 
 impl Service for Httpd {
@@ -75,12 +83,5 @@ impl Service for Httpd {
                 &err
             ))
         }
-    }
-}
-
-impl Httpd {
-    #[inline]
-    pub fn new(remote: Remote, log: Logger, root: Arc<PathBuf>) -> Self {
-        Httpd { remote, root, log }
     }
 }
