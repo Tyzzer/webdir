@@ -17,7 +17,6 @@ extern crate tokio_rustls;
 use std::env;
 use std::fs::File;
 use std::sync::Arc;
-use std::cell::Cell;
 use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
 use std::path::{ Path, PathBuf };
 use std::io::{ self, Read, BufReader };
@@ -99,7 +98,7 @@ fn start(config: Config) -> io::Result<()> {
             remote: remote.clone(),
             root: root.clone(),
             log: log.clone(),
-            socket: Cell::new(None)
+            socket: None
         };
 
         if let Some(ref tls_config) = maybe_tls_config {
@@ -116,7 +115,7 @@ fn start(config: Config) -> io::Result<()> {
         } else {
             let (stream1, stream2) = BiLock::new(stream);
             let handle2 = handle.clone();
-            httpd.socket = Cell::new(Some(stream2));
+            httpd.socket = Some(Arc::new(stream2));
 
             let done = stream1.lock()
                 .map(BiStream)

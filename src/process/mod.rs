@@ -35,7 +35,7 @@ impl<'a> Process<'a> {
     }
 
     #[inline]
-    pub fn process(&mut self) -> io::Result<Response> {
+    pub fn process(&self) -> io::Result<Response> {
         let metadata = self.path.metadata()?;
 
         if let Ok(dir) = self.path.read_dir() {
@@ -68,6 +68,8 @@ impl<'a> Process<'a> {
             let (send, body) = Body::pair();
             res.set_body(body);
 
+            debug!(self.log, "process"; "method" => "senddir");
+
             let done = stream::once(Ok(chunk!(HTML_HEADER)))
                 .chain(stream::once(Ok(chunk!(into up(is_root)))))
                 .chain(stream::iter(SortDir::new(root, dir))
@@ -87,7 +89,7 @@ impl<'a> Process<'a> {
         Ok(res.with_header(header::ContentType(mime)))
     }
 
-    fn process_file(&mut self, metadata: &Metadata) -> io::Result<Response> {
+    fn process_file(&self, metadata: &Metadata) -> io::Result<Response> {
         let entity = Entity::new(self.path.clone(), metadata, self.log);
 
         match entity.check(self.req.headers()) {
@@ -174,21 +176,21 @@ impl<'a> Process<'a> {
         }
     }
 
-    fn send(&mut self, fd: &file::File, range: Option<Range<u64>>) -> io::Result<Response> {
+    fn send(&self, fd: &file::File, range: Option<Range<u64>>) -> io::Result<Response> {
         use ::file::CHUNK_BUFF_LENGTH;
         let mut res = Response::new();
 
         if self.req.method() == &Head {
             res.set_body(Body::empty());
-        } else if let (Some(socket), true) = (self.httpd.socket.take().take(), CHUNK_BUFF_LENGTH >= fd.len as _) {
-                //                                              ^^^ FIXME not work for keepalive
+        } else if let (&Some(ref socket), true) = (&self.httpd.socket, CHUNK_BUFF_LENGTH >= fd.len as _) {
             let range = range.unwrap_or_else(|| 0..fd.len);
             let log = self.log.clone();
             res.set_body(Body::empty());
 
-            debug!(log, "process"; "method" => "sendfile");
+            debug!(self.log, "process"; "method" => "sendfile");
 
-            let sendfile = fd.sendfile(range, socket.lock())?
+            let sendfile = fd.sendfile(range, socket.clone())?
+                //              ^^^ FIXME not work for keepalive
                 .for_each(|_| future::empty())
                 .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
 
@@ -200,7 +202,7 @@ impl<'a> Process<'a> {
             let (send, body) = Body::pair();
             res.set_body(body);
 
-            debug!(log, "process"; "method" => "readchunk");
+            debug!(self.log, "process"; "method" => "readchunk");
 
             let done = fd.read(range)?
                 .forward(send)

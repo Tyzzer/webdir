@@ -1,8 +1,9 @@
 use std::{ fs, cmp };
 use std::ops::Range;
+use std::sync::Arc;
 use std::io::{ self, Read, Seek, SeekFrom };
 use futures::{ Stream, Poll, Async };
-use futures::sync::BiLockAcquire;
+use futures::sync::BiLock;
 use tokio_io::io::Window;
 use tokio_core::net::TcpStream;
 use tokio_core::reactor::Handle;
@@ -31,7 +32,7 @@ impl File {
         Ok(ReadFut { fd, range, buf })
     }
 
-    pub fn sendfile(&self, range: Range<u64>, socket: BiLockAcquire<TcpStream>) -> io::Result<SendFileFut> {
+    pub fn sendfile(&self, range: Range<u64>, socket: Arc<BiLock<TcpStream>>) -> io::Result<SendFileFut> {
         let fd = self.fd.try_clone()?;
         Ok(SendFileFut {
             socket, fd,

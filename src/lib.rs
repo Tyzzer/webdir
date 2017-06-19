@@ -3,11 +3,11 @@
 
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate slog;
-#[macro_use] extern crate futures;
 extern crate url;
 extern crate nix;
 extern crate libc;
 extern crate bytes;
+extern crate futures;
 extern crate tokio_io;
 extern crate tokio_core;
 extern crate hyper;
@@ -30,7 +30,6 @@ mod process;
 
 use std::io;
 use std::sync::Arc;
-use std::cell::Cell;
 use std::path::PathBuf;
 use futures::future::{ self, FutureResult };
 use futures::sync::BiLock;
@@ -47,7 +46,7 @@ pub struct Httpd {
     pub remote: Remote,
     pub root: Arc<PathBuf>,
     pub log: Logger,
-    pub socket: Cell<Option<BiLock<TcpStream>>>,
+    pub socket: Option<Arc<BiLock<TcpStream>>>
 }
 
 impl Service for Httpd {
