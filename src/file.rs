@@ -25,11 +25,11 @@ impl File {
         Ok(File { fd, len })
     }
 
-    pub fn read(&self, range: Range<u64>) -> io::Result<ReadFut> {
+    pub fn read(&self, range: Range<u64>) -> io::Result<ReadChunkFut> {
         let fd = self.fd.try_clone()?;
-        let buf = Box::new([0; CHUNK_BUFF_LENGTH]);
+        let buf = vec![0; cmp::min(CHUNK_BUFF_LENGTH, self.len as _)];
 
-        Ok(ReadFut { fd, range, buf })
+        Ok(ReadChunkFut { fd, range, buf })
     }
 
     pub fn sendfile(&self, range: Range<u64>, socket: Arc<BiLock<TcpStream>>) -> io::Result<SendFileFut> {
@@ -42,13 +42,13 @@ impl File {
     }
 }
 
-pub struct ReadFut {
+pub struct ReadChunkFut {
     fd: fs::File,
     range: Range<u64>,
-    buf: Box<[u8; CHUNK_BUFF_LENGTH]>
+    buf: Vec<u8>
 }
 
-impl Stream for ReadFut {
+impl Stream for ReadChunkFut {
     type Item = hyper::Result<hyper::Chunk>;
     type Error = error::Error;
 

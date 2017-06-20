@@ -106,6 +106,7 @@ impl<'a> Process<'a> {
             },
             EntifyResult::One(range) => {
                 debug!(self.log, "process"; "range" => format_args!("{:?}", range));
+
                 let handle = self.httpd.remote.handle()
                     .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
                 let fd = entity.open(handle)?;
@@ -164,7 +165,7 @@ impl<'a> Process<'a> {
                     .flatten()
                     .forward(send)
                     .map(drop)
-                    .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
+                    .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
                 self.httpd.remote.spawn(move |_| done);
 
@@ -191,8 +192,7 @@ impl<'a> Process<'a> {
 
             let done = fd.sendfile(range, socket.clone())?
                 .for_each(|_| future::ok(()))
-                .map(drop)
-                .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
+                .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
             self.httpd.remote.spawn(move |_| done);
         } else {
@@ -207,7 +207,7 @@ impl<'a> Process<'a> {
             let done = fd.read(range)?
                 .forward(send)
                 .map(drop)
-                .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
+                .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
             self.httpd.remote.spawn(move |_| done);
         }

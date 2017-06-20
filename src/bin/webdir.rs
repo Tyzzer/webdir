@@ -32,104 +32,39 @@ use tokio_core::net::TcpListener;
 use rustls::{ Certificate, PrivateKey, ServerConfig, ServerSessionMemoryCache };
 use rustls::internal::pemfile::{ certs, rsa_private_keys };
 use tokio_rustls::ServerConfigExt;
-use webdir::{ Httpd, BiStream };
+use webdir::{ Httpd, BiTcpStream };
 
 
 #[derive(StructOpt)]
 #[derive(Serialize, Deserialize)]
 #[structopt]
 struct Config {
-    #[structopt(long = "bind", help = "bind address")]
+    /// bind address
+    #[structopt(short = "b", long = "bind")]
     addr: Option<SocketAddr>,
-    #[structopt(long = "root", help = "root path")]
+
+    /// root path
+    #[structopt(short = "r", long = "root")]
     root: Option<String>,
-    #[structopt(long = "cert", help = "TLS cert", requires = "key")]
+
+    /// TLS certificate
+    #[structopt(long = "cert", requires = "key")]
     cert: Option<String>,
-    #[structopt(long = "key", help = "TLS key", requires = "cert")]
+    /// TLS key
+    #[structopt(long = "key", requires = "cert")]
     key: Option<String>,
-    #[structopt(long = "session-buff", help = "TLS session buff")]
+    /// TLS session buffer length
+    #[structopt(long = "session-buff", requires = "cert")]
     session_buff: Option<usize>,
 
+    /// keepalive
+    #[structopt(long = "keepalive")]
+    keepalive: Option<bool>,
+
+    /// read config from file
     #[serde(skip_serializing)]
-    #[structopt(short = "c", long = "config", help = "read config from File")]
+    #[structopt(short = "c", long = "config")]
     config: Option<String>
-}
-
-
-#[inline]
-fn start(config: Config) -> io::Result<()> {
-    let decorator = TermDecorator::new().build();
-    let drain = CompactFormat::new(decorator).build().fuse();
-    let drain = Async::new(drain).build().fuse();
-    let log = Logger::root(Arc::new(drain), o!("version" => env!("CARGO_PKG_VERSION")));
-
-    let maybe_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
-        let mut tls_config = ServerConfig::new();
-        tls_config.set_single_cert(load_certs(cert)?, load_keys(key)?.remove(0));
-        tls_config.set_persistence(ServerSessionMemoryCache::new(config.session_buff.unwrap_or(64)));
-        Some(Arc::new(tls_config))
-    } else {
-        None
-    };
-
-    let root = if let Some(ref p) = config.root {
-        Arc::new(Path::new(p).canonicalize()?)
-    } else {
-        Arc::new(env::current_dir()?)
-    };
-
-    let mut core = Core::new()?;
-    let handle = core.handle();
-    let remote = handle.remote().clone();
-    let listener = TcpListener::bind(
-        &config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0)),
-        &handle
-    )?;
-
-    info!(log, "listening";
-        "root" => format_args!("{}", root.display()),
-        "listen" => format_args!("{}", listener.local_addr()?),
-        "tls" => maybe_tls_config.is_some()
-    );
-
-    let done = listener.incoming().for_each(|(stream, addr)| {
-        let log = log.new(o!("addr" => format!("{}", addr)));
-        let mut httpd = Httpd {
-            remote: remote.clone(),
-            root: root.clone(),
-            log: log.clone(),
-            socket: None
-        };
-
-        if let Some(ref tls_config) = maybe_tls_config {
-            let handle2 = handle.clone();
-
-            let done = tls_config.accept_async(stream)
-                .map(move |stream| Http::new()
-                    .keep_alive(true)
-                    .bind_connection(&handle2, stream, addr, httpd)
-                )
-                .map_err(move |err| error!(log, "tls"; "err" => format_args!("{}", err)));
-
-            handle.spawn(done);
-        } else {
-            let (stream1, stream2) = BiLock::new(stream);
-            let handle2 = handle.clone();
-            httpd.socket = Some(Arc::new(stream2));
-
-            let done = stream1.lock()
-                .map(BiStream)
-                .map(move |stream| Http::new()
-                    .keep_alive(false)
-                    .bind_connection(&handle2, stream, addr, httpd)
-                );
-            handle.spawn(done);
-        }
-
-        Ok(())
-    });
-
-    core.run(done)
 }
 
 
@@ -185,6 +120,9 @@ fn make_config() -> io::Result<Config> {
         if args_config.session_buff.is_none() {
             args_config.session_buff = config.session_buff;
         }
+        if args_config.keepalive.is_none() {
+            args_config.keepalive = config.keepalive;
+        }
     }
 
     Ok(args_config)
@@ -202,6 +140,82 @@ fn load_keys(path: &str) -> io::Result<Vec<PrivateKey>> {
         .map_err(|_| err!(Other, "Not found keys"))
 }
 
+
+#[inline]
+fn start(config: Config) -> io::Result<()> {
+    let decorator = TermDecorator::new().build();
+    let drain = CompactFormat::new(decorator).build().fuse();
+    let drain = Async::new(drain).build().fuse();
+    let log = Logger::root(Arc::new(drain), o!("version" => env!("CARGO_PKG_VERSION")));
+
+    let maybe_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
+        let mut tls_config = ServerConfig::new();
+        tls_config.set_single_cert(load_certs(cert)?, load_keys(key)?.remove(0));
+        tls_config.set_persistence(ServerSessionMemoryCache::new(config.session_buff.unwrap_or(64)));
+        Some(Arc::new(tls_config))
+    } else {
+        None
+    };
+
+    let root = if let Some(ref p) = config.root {
+        Arc::new(Path::new(p).canonicalize()?)
+    } else {
+        Arc::new(env::current_dir()?)
+    };
+
+    let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0));
+    let keepalive = config.keepalive.unwrap_or(true);
+
+    let mut core = Core::new()?;
+    let handle = core.handle();
+    let remote = handle.remote().clone();
+    let listener = TcpListener::bind(&addr, &handle)?;
+
+    info!(log, "listening";
+        "root" => format_args!("{}", root.display()),
+        "listen" => format_args!("{}", listener.local_addr()?),
+        "tls" => maybe_tls_config.is_some()
+    );
+
+    let done = listener.incoming().for_each(|(stream, addr)| {
+        let log = log.new(o!("addr" => format!("{}", addr)));
+        let mut httpd = Httpd {
+            remote: remote.clone(),
+            root: root.clone(),
+            log: log.clone(),
+            socket: None
+        };
+
+        if let Some(ref tls_config) = maybe_tls_config {
+            let handle2 = handle.clone();
+
+            let done = tls_config.accept_async(stream)
+                .map(move |stream| Http::new()
+                    .keep_alive(keepalive)
+                    .bind_connection(&handle2, stream, addr, httpd)
+                )
+                .map_err(move |err| error!(log, "tls"; "err" => format_args!("{}", err)));
+
+            handle.spawn(done);
+        } else {
+            let (stream, stream2) = BiLock::new(stream);
+            let handle2 = handle.clone();
+            httpd.socket = Some(Arc::new(stream2));
+
+            let done = stream.lock()
+                .map(BiTcpStream)
+                .map(move |stream| Http::new()
+                    .keep_alive(keepalive)
+                    .bind_connection(&handle2, stream, addr, httpd)
+                );
+            handle.spawn(done);
+        }
+
+        Ok(())
+    });
+
+    core.run(done)
+}
 
 fn main() {
     let config = make_config().unwrap();

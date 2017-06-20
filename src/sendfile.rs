@@ -11,15 +11,15 @@ use nix;
 use ::error;
 
 
-pub struct BiStream(pub BiLockAcquired<TcpStream>);
+pub struct BiTcpStream(pub BiLockAcquired<TcpStream>);
 
-impl io::Read for BiStream {
+impl io::Read for BiTcpStream {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         self.0.read(buf)
     }
 }
 
-impl io::Write for BiStream {
+impl io::Write for BiTcpStream {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         self.0.write(buf)
     }
@@ -29,7 +29,7 @@ impl io::Write for BiStream {
     }
 }
 
-impl AsyncRead for BiStream {
+impl AsyncRead for BiTcpStream {
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         AsyncRead::prepare_uninitialized_buffer(&self.0 as &TcpStream, buf)
     }
@@ -39,7 +39,7 @@ impl AsyncRead for BiStream {
     }
 }
 
-impl AsyncWrite for BiStream {
+impl AsyncWrite for BiTcpStream {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
         AsyncWrite::shutdown(&mut self.0 as &mut TcpStream)
     }

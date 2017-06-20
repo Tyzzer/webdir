@@ -39,7 +39,7 @@ use hyper::{ header, Get, Head, StatusCode };
 use hyper::server::{ Service, Request, Response };
 use slog::Logger;
 use process::Process;
-pub use sendfile::BiStream;
+pub use sendfile::BiTcpStream;
 
 
 pub struct Httpd {
@@ -56,18 +56,18 @@ impl Service for Httpd {
     type Future = FutureResult<Self::Response, Self::Error>;
 
     fn call(&self, req: Request) -> Self::Future {
+        info!(self.log, "request";
+            "path" => req.path(),
+            "method" => format_args!("{}", req.method())
+        );
+        debug!(self.log, "request"; "headers" => format_args!("{:?}", req.headers()));
+
         if ![Get, Head].contains(req.method()) {
             return future::ok(
                 response::fail(&self.log, true, StatusCode::MethodNotAllowed, &err!(Other, "Not method"))
                     .with_header(header::Allow(vec![Head, Get]))
             );
         }
-
-        info!(self.log, "request";
-            "path" => req.path(),
-            "method" => format_args!("{}", req.method())
-        );
-        debug!(self.log, "request"; "headers" => format_args!("{:?}", req.headers()));
 
         match Process::new(self, &self.log, &req).process() {
             Ok(res) => future::ok(res),
