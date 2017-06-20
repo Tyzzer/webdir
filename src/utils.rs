@@ -38,7 +38,7 @@ macro_rules! chunk {
     };
 }
 
-pub(crate) fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {
+pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {
     path.as_ref()
         .components()
         .fold((0, root.to_path_buf()), |(mut depth, mut sum), next| {
@@ -89,7 +89,7 @@ fn test_path_canonicalize() {
 
 
 #[inline]
-pub(crate) fn u64_to_bytes(x: u64) -> [u8; 8] {
+pub fn u64_to_bytes(x: u64) -> [u8; 8] {
     unsafe { mem::transmute(x) }
 }
 
@@ -102,7 +102,7 @@ fn test_u64_to_bytes() {
 
 #[cfg(unix)]
 #[inline]
-pub(crate) fn encode_path(path: &Path) -> String {
+pub fn encode_path(path: &Path) -> String {
     use std::os::unix::ffi::OsStrExt;
 
     percent_encode(path.as_os_str().as_bytes(), DEFAULT_ENCODE_SET)
@@ -111,7 +111,7 @@ pub(crate) fn encode_path(path: &Path) -> String {
 
 #[cfg(not(unix))]
 #[inline]
-pub(crate) fn encode_path(path: &Path) -> String {
+pub fn encode_path(path: &Path) -> String {
     percent_encode(path.to_string_lossy().as_bytes(), DEFAULT_ENCODE_SET)
         .fold(String::from("/"), Add::add)
 }
@@ -119,7 +119,7 @@ pub(crate) fn encode_path(path: &Path) -> String {
 
 #[cfg(unix)]
 #[inline]
-pub(crate) fn decode_path(path: &str) -> PathBuf {
+pub fn decode_path(path: &str) -> PathBuf {
     use std::ffi::OsString;
     use std::os::unix::ffi::OsStringExt;
 
@@ -130,7 +130,7 @@ pub(crate) fn decode_path(path: &str) -> PathBuf {
 
 #[cfg(not(unix))]
 #[inline]
-pub(crate) fn decode_path(path: &str) -> PathBuf {
+pub fn decode_path(path: &str) -> PathBuf {
     let path_buf = percent_decode(path.as_bytes()).collect::<Vec<u8>>();
     let path_buf = String::from_utf8_lossy(&path_buf).into_owned();
     PathBuf::from(path_buf)

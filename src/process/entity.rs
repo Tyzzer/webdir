@@ -35,15 +35,15 @@ pub enum EntifyResult {
 impl<'a> Entity<'a> {
     pub fn new(path: Rc<PathBuf>, metadata: &'a Metadata, log: &'a Logger) -> Self {
         let len = metadata.len();
-        Entity { path, metadata, log, len, etag: Self::etag(len, metadata) }
+        Entity { path, metadata, log, len, etag: Self::etag(metadata) }
     }
 
     #[cfg(unix)]
-    fn etag(len: u64, metadata: &Metadata) -> header::EntityTag {
+    fn etag(metadata: &Metadata) -> header::EntityTag {
         use std::os::unix::fs::MetadataExt;
 
         let mut hasher = MetroHash::default();
-        hasher.write_u64(len);
+        hasher.write_u64(metadata.size());
         hasher.write_u64(metadata.ino());
         hasher.write_i64(metadata.mtime());
         hasher.write_i64(metadata.mtime_nsec());
@@ -52,27 +52,15 @@ impl<'a> Entity<'a> {
         )
     }
 
-    #[cfg(not(unix))]
-    fn etag(len: u64, metadata: &Metadata) -> header::EntityTag {
-        use std::hash::Hash;
-        use std::time::UNIX_EPOCH;
+    #[cfg(windows)]
+    fn etag(metadata: &Metadata) -> header::EntityTag {
+        use std::os::windows::fs::MetadataExt;
 
         let mut hasher = MetroHash::default();
-        metadata.file_type().hash(&mut hasher);
-        len.hash(&mut hasher);
-
-        if let Ok(time) = metadata.created() {
-            if let Ok(time) = time.duration_since(UNIX_EPOCH) {
-                time.hash(&mut hasher);
-            }
-        }
-
-        if let Ok(time) = metadata.modified() {
-            if let Ok(time) = time.duration_since(UNIX_EPOCH) {
-                time.hash(&mut hasher);
-            }
-        }
-
+        hasher.write_u64(metadata.file_attributes());
+        hasher.write_u64(metadata.creation_time());
+        hasher.write_u64(metadata.last_write_time());
+        hasher.write_u64(metadata.file_size());
         header::EntityTag::strong(
             base64url::encode_nopad(&u64_to_bytes(hasher.finish()))
         )

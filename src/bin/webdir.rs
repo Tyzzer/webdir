@@ -1,3 +1,5 @@
+#![feature(attr_literals)]
+
 #[macro_use] extern crate slog;
 extern crate slog_term;
 extern crate slog_async;
@@ -40,26 +42,27 @@ use webdir::{ Httpd, BiTcpStream };
 #[structopt]
 struct Config {
     /// bind address
-    #[structopt(short = "b", long = "bind")]
+    #[structopt(short = "b", long = "bind", display_order(1))]
     addr: Option<SocketAddr>,
 
     /// root path
-    #[structopt(short = "r", long = "root")]
+    #[structopt(short = "r", long = "root", display_order(2))]
     root: Option<String>,
 
     /// TLS certificate
-    #[structopt(long = "cert", requires = "key")]
+    #[structopt(long = "cert", requires = "key", display_order(3))]
     cert: Option<String>,
     /// TLS key
-    #[structopt(long = "key", requires = "cert")]
+    #[structopt(long = "key", requires = "cert", display_order(4))]
     key: Option<String>,
     /// TLS session buffer length
-    #[structopt(long = "session-buff", requires = "cert")]
+    #[structopt(long = "session-buff", requires = "cert", display_order(5))]
     session_buff: Option<usize>,
 
-    /// keepalive
-    #[structopt(long = "keepalive")]
-    keepalive: Option<bool>,
+    /// disable keepalive
+    #[serde(default)]
+    #[structopt(long = "no-keepalive")]
+    no_keepalive: bool,
 
     /// read config from file
     #[serde(skip_serializing)]
@@ -120,9 +123,7 @@ fn make_config() -> io::Result<Config> {
         if args_config.session_buff.is_none() {
             args_config.session_buff = config.session_buff;
         }
-        if args_config.keepalive.is_none() {
-            args_config.keepalive = config.keepalive;
-        }
+        args_config.no_keepalive = args_config.no_keepalive || args_config.no_keepalive;
     }
 
     Ok(args_config)
@@ -164,7 +165,7 @@ fn start(config: Config) -> io::Result<()> {
     };
 
     let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0));
-    let keepalive = config.keepalive.unwrap_or(true);
+    let keepalive = !config.no_keepalive;
 
     let mut core = Core::new()?;
     let handle = core.handle();

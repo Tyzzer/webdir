@@ -1,5 +1,5 @@
 use std::{ io, fmt };
-use hyper::{ header, StatusCode, Response, Body };
+use hyper::{ header, StatusCode, Response };
 use slog::Logger;
 
 
@@ -31,5 +31,4 @@ pub fn not_modified(log: &Logger, display: fmt::Arguments) -> Response {
 
     Response::new()
         .with_status(StatusCode::NotModified)
-        .with_body(Body::empty())
 }
