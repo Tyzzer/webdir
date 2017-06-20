@@ -1,7 +1,6 @@
-use std::{ fs, cmp };
+use std::{ io, fs, cmp };
 use std::ops::Range;
 use std::sync::Arc;
-use std::io::{ self, Read, Seek, SeekFrom };
 use futures::{ Stream, Poll, Async };
 use futures::sync::BiLock;
 use tokio_io::io::Window;
@@ -53,14 +52,21 @@ impl Stream for ReadChunkFut {
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        #[cfg(unix)] use std::os::unix::fs::FileExt;
+        #[cfg(windows)] use std::os::windows::fs::FileExt;
+
         let want_len = cmp::min((self.range.end - self.range.start) as _, self.buf.len());
 
         if want_len > 0 {
             let mut window = Window::new(&mut self.buf[..]);
             window.set_end(want_len);
-            self.fd.seek(SeekFrom::Start(self.range.start as _))?;
 
-            let read_len = self.fd.read(window.as_mut())?;
+            #[cfg(unix)]
+            let read_len = self.fd.read_at(window.as_mut(), self.range.start)?;
+
+            #[cfg(windows)]
+            let read_len = self.fd.seek_read(window.as_mut(), self.range.start)?;
+
             self.range.start += read_len as _;
 
             window.set_end(read_len);
