@@ -13,6 +13,9 @@ name = "webdir"
 path = "src/bin/webdir.rs"
 doc = false
 
+[features]
+sendfile = [ "nix" ]
+
 [dependencies]
 xdg = "2.1"
 toml = "0.4"
@@ -22,7 +25,7 @@ structopt = "0.0.5"
 structopt-derive = "0.0.5"
 error-chain = "0.10"
 
-nix = "0.8"
+nix = { version = "0.8", optional = true }
 libc = "0.2"
 bytes = "0.4"
 futures = "0.1"

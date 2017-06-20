@@ -6,7 +6,7 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::rc::Rc;
 use std::fs::{ Metadata, ReadDir };
-use futures::{ future, stream, Stream, Future };
+use futures::{ stream, Stream, Future };
 use hyper::{ header, Request, Response, Head, Body, StatusCode };
 use mime_guess::guess_mime_type;
 use maud::Render;
@@ -177,7 +177,35 @@ impl<'a> Process<'a> {
         }
     }
 
+    #[cfg(not(feature = "sendfile"))]
     fn send(&self, fd: &file::File, range: Option<Range<u64>>) -> io::Result<Response> {
+        let mut res = Response::new();
+
+        if self.req.method() == &Head {
+            res.set_body(Body::empty());
+        } else {
+            let range = range.unwrap_or_else(|| 0..fd.len);
+
+            let log = self.log.clone();
+            let (send, body) = Body::pair();
+            res.set_body(body);
+
+            debug!(self.log, "process"; "method" => "readchunk");
+
+            let done = fd.read(range)?
+                .forward(send)
+                .map(drop)
+                .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
+
+            self.httpd.remote.spawn(move |_| done);
+        }
+
+        Ok(res)
+    }
+
+    #[cfg(feature = "sendfile")]
+    fn send(&self, fd: &file::File, range: Option<Range<u64>>) -> io::Result<Response> {
+        use futures::future;
         use ::file::CHUNK_BUFF_LENGTH;
         let mut res = Response::new();
 

@@ -1,14 +1,15 @@
 use std::{ io, fs, cmp };
 use std::ops::Range;
-use std::sync::Arc;
 use futures::{ Stream, Poll, Async };
-use futures::sync::BiLock;
 use tokio_io::io::Window;
-use tokio_core::net::TcpStream;
 use tokio_core::reactor::Handle;
 use hyper;
-use ::sendfile::SendFileFut;
 use ::error;
+
+#[cfg(feature = "sendfile")] use tokio_core::net::TcpStream;
+#[cfg(feature = "sendfile")] use std::sync::Arc;
+#[cfg(feature = "sendfile")] use futures::sync::BiLock;
+#[cfg(feature = "sendfile")] use ::sendfile::SendFileFut;
 
 
 pub const CHUNK_BUFF_LENGTH: usize = 1 << 16;
@@ -31,6 +32,7 @@ impl File {
         Ok(ReadChunkFut { fd, range, buf })
     }
 
+    #[cfg(feature = "sendfile")]
     pub fn sendfile(&self, range: Range<u64>, socket: Arc<BiLock<TcpStream>>) -> io::Result<SendFileFut> {
         let fd = self.fd.try_clone()?;
         Ok(SendFileFut {

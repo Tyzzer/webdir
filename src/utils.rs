@@ -38,6 +38,7 @@ macro_rules! chunk {
     };
 }
 
+
 pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {
     path.as_ref()
         .components()
@@ -55,7 +56,6 @@ pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBu
             (depth, sum)
         })
 }
-
 
 #[test]
 fn test_path_canonicalize() {
@@ -115,7 +115,6 @@ pub fn encode_path(path: &Path) -> String {
     percent_encode(path.to_string_lossy().as_bytes(), DEFAULT_ENCODE_SET)
         .fold(String::from("/"), Add::add)
 }
-
 
 #[cfg(unix)]
 #[inline]

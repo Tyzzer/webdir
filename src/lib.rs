@@ -3,8 +3,8 @@
 
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate slog;
+#[cfg(feature = "sendfile")] extern crate nix;
 extern crate url;
-extern crate nix;
 extern crate libc;
 extern crate bytes;
 extern crate futures;
@@ -22,9 +22,9 @@ extern crate data_encoding;
 extern crate smallvec;
 
 #[macro_use] mod utils;
+#[cfg(feature = "sendfile")] pub mod sendfile;
 pub mod error;
 mod file;
-mod sendfile;
 mod response;
 mod process;
 
@@ -32,20 +32,22 @@ use std::io;
 use std::sync::Arc;
 use std::path::PathBuf;
 use futures::future::{ self, FutureResult };
-use futures::sync::BiLock;
-use tokio_core::net::TcpStream;
 use tokio_core::reactor::Remote;
 use hyper::{ header, Get, Head, StatusCode };
 use hyper::server::{ Service, Request, Response };
 use slog::Logger;
 use process::Process;
-pub use sendfile::BiTcpStream;
+
+#[cfg(feature = "sendfile")] use tokio_core::net::TcpStream;
+#[cfg(feature = "sendfile")] use futures::sync::BiLock;
 
 
 pub struct Httpd {
     pub remote: Remote,
     pub root: Arc<PathBuf>,
     pub log: Logger,
+
+    #[cfg(feature = "sendfile")]
     pub socket: Option<Arc<BiLock<TcpStream>>>
 }
 

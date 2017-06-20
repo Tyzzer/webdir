@@ -1,4 +1,4 @@
-#![feature(attr_literals)]
+#![feature(attr_literals, struct_field_attributes)]
 
 #[macro_use] extern crate slog;
 extern crate slog_term;
@@ -7,8 +7,8 @@ extern crate slog_async;
 extern crate structopt;
 #[macro_use] extern crate serde_derive;
 extern crate serde;
-extern crate toml;
 extern crate xdg;
+extern crate toml;
 extern crate futures;
 extern crate hyper;
 extern crate tokio_core;
@@ -16,29 +16,29 @@ extern crate rustls;
 extern crate tokio_rustls;
 #[macro_use] extern crate webdir;
 
-use std::env;
+mod utils;
+
+use std::{ env, io };
 use std::fs::File;
+use std::io::Read;
 use std::sync::Arc;
 use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
 use std::path::{ Path, PathBuf };
-use std::io::{ self, Read, BufReader };
 use slog::{ Drain, Logger };
 use slog_term::{ CompactFormat, TermDecorator };
 use slog_async::Async;
 use structopt::StructOpt;
 use futures::{ Future, Stream };
-use futures::sync::BiLock;
 use hyper::server::Http;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
-use rustls::{ Certificate, PrivateKey, ServerConfig, ServerSessionMemoryCache };
-use rustls::internal::pemfile::{ certs, rsa_private_keys };
+use rustls::{ ServerConfig, ServerSessionMemoryCache };
 use tokio_rustls::ServerConfigExt;
-use webdir::{ Httpd, BiTcpStream };
+use webdir::Httpd;
+use utils::{ read_config, load_certs, load_keys };
 
 
-#[derive(StructOpt)]
-#[derive(Serialize, Deserialize)]
+#[derive(StructOpt, Deserialize)]
 #[structopt]
 struct Config {
     /// bind address
@@ -73,31 +73,11 @@ struct Config {
 
 #[inline]
 fn make_config() -> io::Result<Config> {
-    const CONFIG_NAME: &str = concat!(env!("CARGO_PKG_NAME"), ".toml");
-
     let mut args_config = Config::from_args();
 
     let maybe_config_path = args_config.config.as_ref()
         .map(PathBuf::from)
-        .or_else(|| xdg::BaseDirectories::with_prefix(env!("CARGO_PKG_NAME"))
-            .ok()
-            .and_then(|xdg| xdg.find_config_file(CONFIG_NAME))
-        )
-        .or_else(|| xdg::BaseDirectories::new()
-            .ok()
-            .and_then(|xdg| xdg.find_config_file(CONFIG_NAME))
-        )
-        .or_else(|| env::var("HOME")
-            .ok()
-            .and_then(|home| {
-                let path = Path::new(&home).join(CONFIG_NAME);
-                if path.is_file() {
-                    Some(path)
-                } else {
-                    None
-                }
-            })
-        );
+        .or_else(read_config);
 
     if let Some(ref path) = maybe_config_path {
         let mut buff = Vec::new();
@@ -123,22 +103,10 @@ fn make_config() -> io::Result<Config> {
         if args_config.session_buff.is_none() {
             args_config.session_buff = config.session_buff;
         }
-        args_config.no_keepalive = args_config.no_keepalive || args_config.no_keepalive;
+        args_config.no_keepalive |= args_config.no_keepalive;
     }
 
     Ok(args_config)
-}
-
-#[inline]
-fn load_certs(path: &str) -> io::Result<Vec<Certificate>> {
-    certs(&mut BufReader::new(File::open(path)?))
-        .map_err(|_| err!(Other, "Not found cert"))
-}
-
-#[inline]
-fn load_keys(path: &str) -> io::Result<Vec<PrivateKey>> {
-    rsa_private_keys(&mut BufReader::new(File::open(path)?))
-        .map_err(|_| err!(Other, "Not found keys"))
 }
 
 
@@ -158,12 +126,9 @@ fn start(config: Config) -> io::Result<()> {
         None
     };
 
-    let root = if let Some(ref p) = config.root {
-        Arc::new(Path::new(p).canonicalize()?)
-    } else {
-        Arc::new(env::current_dir()?)
-    };
-
+    let root =
+        if let Some(ref p) = config.root { Arc::new(Path::new(p).canonicalize()?) }
+        else { Arc::new(env::current_dir()?) };
     let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0));
     let keepalive = !config.no_keepalive;
 
@@ -180,11 +145,11 @@ fn start(config: Config) -> io::Result<()> {
 
     let done = listener.incoming().for_each(|(stream, addr)| {
         let log = log.new(o!("addr" => format!("{}", addr)));
-        let mut httpd = Httpd {
+        let httpd = Httpd {
             remote: remote.clone(),
             root: root.clone(),
             log: log.clone(),
-            socket: None
+            #[cfg(feature = "sendfile")] socket: None
         };
 
         if let Some(ref tls_config) = maybe_tls_config {
@@ -199,17 +164,33 @@ fn start(config: Config) -> io::Result<()> {
 
             handle.spawn(done);
         } else {
-            let (stream, stream2) = BiLock::new(stream);
-            let handle2 = handle.clone();
-            httpd.socket = Some(Arc::new(stream2));
+            #[cfg(feature = "sendfile")]
+            let run = |mut httpd: Httpd| {
+                use futures::sync::BiLock;
+                use webdir::sendfile::BiTcpStream;
 
-            let done = stream.lock()
-                .map(BiTcpStream)
-                .map(move |stream| Http::new()
+                let (stream, stream2) = BiLock::new(stream);
+                let handle2 = handle.clone();
+                httpd.socket = Some(Arc::new(stream2));
+
+                let done = stream.lock()
+                    .map(BiTcpStream)
+                    .map(move |stream| Http::new()
+                        .keep_alive(keepalive)
+                        .bind_connection(&handle2, stream, addr, httpd)
+                    );
+
+                handle.spawn(done);
+            };
+
+            #[cfg(not(feature = "sendfile"))]
+            let run = |httpd| {
+                Http::new()
                     .keep_alive(keepalive)
-                    .bind_connection(&handle2, stream, addr, httpd)
-                );
-            handle.spawn(done);
+                    .bind_connection(&handle, stream, addr, httpd)
+            };
+
+            run(httpd);
         }
 
         Ok(())
