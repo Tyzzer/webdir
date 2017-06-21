@@ -77,9 +77,12 @@ pub struct Config {
     pub config: Option<String>,
 
     /// disable keepalive
-    #[serde(default)]
+    #[serde(skip_serializing, default)]
     #[structopt(long = "no-keepalive")]
-    pub no_keepalive: bool
+    pub no_keepalive: bool,
+
+    #[structopt(hidden = true)]
+    pub keepalive: Option<bool>
 }
 
 
@@ -124,7 +127,11 @@ fn make_config() -> io::Result<Config> {
         if args_config.log_output.is_none() {
             args_config.log_output = config.log_output;
         }
-        args_config.no_keepalive |= args_config.no_keepalive;
+        if args_config.no_keepalive {
+            args_config.keepalive = Some(false);
+        } else {
+            args_config.keepalive = config.keepalive;
+        }
     }
 
     Ok(args_config)
@@ -148,7 +155,7 @@ fn start(config: Config) -> io::Result<()> {
         if let Some(ref p) = config.root { Arc::new(Path::new(p).canonicalize()?) }
         else { Arc::new(env::current_dir()?) };
     let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0));
-    let keepalive = !config.no_keepalive;
+    let keepalive = config.keepalive.unwrap_or(true);
     let chunk_length = config.chunk_length.unwrap_or(1 << 16);
 
     let mut core = Core::new()?;
@@ -159,6 +166,7 @@ fn start(config: Config) -> io::Result<()> {
     info!(log, "listening";
         "root" => format_args!("{}", root.display()),
         "addr" => format_args!("{}", listener.local_addr()?),
+        "keepalive" => keepalive,
         "tls" => maybe_tls_config.is_some()
     );
 
