@@ -11,7 +11,7 @@ use slog::Logger;
 use smallvec::SmallVec;
 use mime_guess::guess_mime_type;
 use metrohash::MetroHash;
-use data_encoding::base64url;
+use base64::{ URL_SAFE_NO_PAD, encode_config };
 use ::response::{ BOUNDARY, fail, not_modified };
 use ::utils::u64_to_bytes;
 use ::file;
@@ -47,9 +47,10 @@ impl<'a> Entity<'a> {
         hasher.write_u64(metadata.ino());
         hasher.write_i64(metadata.mtime());
         hasher.write_i64(metadata.mtime_nsec());
-        header::EntityTag::strong(
-            base64url::encode_nopad(&u64_to_bytes(hasher.finish()))
-        )
+        header::EntityTag::strong(encode_config(
+            &u64_to_bytes(hasher.finish()),
+            URL_SAFE_NO_PAD
+        ))
     }
 
     #[cfg(windows)]
@@ -61,9 +62,10 @@ impl<'a> Entity<'a> {
         hasher.write_u64(metadata.creation_time());
         hasher.write_u64(metadata.last_write_time());
         hasher.write_u64(metadata.file_size());
-        header::EntityTag::strong(
-            base64url::encode_nopad(&u64_to_bytes(hasher.finish()))
-        )
+        header::EntityTag::strong(encode_config(
+            &u64_to_bytes(hasher.finish()),
+            URL_SAFE_NO_PAD
+        ))
     }
 
     #[inline]

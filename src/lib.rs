@@ -18,7 +18,7 @@ extern crate humanesort;
 extern crate mime;
 extern crate mime_guess;
 extern crate metrohash;
-extern crate data_encoding;
+extern crate base64;
 extern crate smallvec;
 
 #[macro_use] mod utils;

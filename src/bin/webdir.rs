@@ -24,9 +24,6 @@ use std::io::Read;
 use std::sync::Arc;
 use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
 use std::path::{ Path, PathBuf };
-use slog::{ Drain, Logger };
-use slog_term::{ CompactFormat, TermDecorator };
-use slog_async::Async;
 use structopt::StructOpt;
 use futures::{ Future, Stream };
 use hyper::server::Http;
@@ -35,39 +32,50 @@ use tokio_core::net::TcpListener;
 use rustls::{ ServerConfig, ServerSessionMemoryCache };
 use tokio_rustls::ServerConfigExt;
 use webdir::Httpd;
-use utils::{ read_config, load_certs, load_keys };
+use utils::{
+    Format,
+    read_config, init_logging, load_certs, load_keys
+};
 
 
 #[derive(StructOpt, Deserialize)]
 #[structopt]
-struct Config {
+pub struct Config {
     /// bind address
     #[structopt(short = "b", long = "bind", display_order(1))]
-    addr: Option<SocketAddr>,
+    pub addr: Option<SocketAddr>,
 
     /// root path
     #[structopt(short = "r", long = "root", display_order(2))]
-    root: Option<String>,
+    pub root: Option<String>,
 
     /// TLS certificate
     #[structopt(long = "cert", requires = "key", display_order(3))]
-    cert: Option<String>,
+    pub cert: Option<String>,
     /// TLS key
     #[structopt(long = "key", requires = "cert", display_order(4))]
-    key: Option<String>,
+    pub key: Option<String>,
     /// TLS session buffer length
     #[structopt(long = "session-buff", requires = "cert", display_order(5))]
-    session_buff: Option<usize>,
+    pub session_buff: Option<usize>,
 
     /// disable keepalive
     #[serde(default)]
     #[structopt(long = "no-keepalive")]
-    no_keepalive: bool,
+    pub no_keepalive: bool,
+
+    /// logging format
+    #[structopt(short = "f", long = "format", possible_value = "compact", possible_value = "full")]
+    pub format: Option<Format>,
+
+    /// logging output
+    #[structopt(short = "o", long = "log-output")]
+    pub log_output: Option<String>,
 
     /// read config from file
     #[serde(skip_serializing)]
     #[structopt(short = "c", long = "config")]
-    config: Option<String>
+    pub config: Option<String>
 }
 
 
@@ -103,6 +111,12 @@ fn make_config() -> io::Result<Config> {
         if args_config.session_buff.is_none() {
             args_config.session_buff = config.session_buff;
         }
+        if args_config.format.is_none() {
+            args_config.format = config.format;
+        }
+        if args_config.log_output.is_none() {
+            args_config.log_output = config.log_output;
+        }
         args_config.no_keepalive |= args_config.no_keepalive;
     }
 
@@ -112,10 +126,7 @@ fn make_config() -> io::Result<Config> {
 
 #[inline]
 fn start(config: Config) -> io::Result<()> {
-    let decorator = TermDecorator::new().build();
-    let drain = CompactFormat::new(decorator).build().fuse();
-    let drain = Async::new(drain).build().fuse();
-    let log = Logger::root(Arc::new(drain), o!("version" => env!("CARGO_PKG_VERSION")));
+    let log = init_logging(&config)?;
 
     let maybe_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
         let mut tls_config = ServerConfig::new();
@@ -139,7 +150,7 @@ fn start(config: Config) -> io::Result<()> {
 
     info!(log, "listening";
         "root" => format_args!("{}", root.display()),
-        "listen" => format_args!("{}", listener.local_addr()?),
+        "addr" => format_args!("{}", listener.local_addr()?),
         "tls" => maybe_tls_config.is_some()
     );
 

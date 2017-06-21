@@ -1,8 +1,11 @@
 use std::path::PathBuf;
-use std::fs::File;
+use std::fs::{ File, OpenOptions };
+use std::str::FromStr;
 use std::io::{ self, BufReader };
 use rustls::{ Certificate, PrivateKey };
 use rustls::internal::pemfile::{ certs, rsa_private_keys };
+use slog::Logger;
+use super::Config;
 
 
 #[inline]
@@ -37,4 +40,79 @@ pub fn read_config() -> Option<PathBuf> {
                 else { None }
             )
         )
+}
+
+
+#[derive(Clone, Copy, Deserialize)]
+pub enum Format {
+    Compact,
+    Full
+}
+
+impl Default for Format {
+    fn default() -> Self {
+        Format::Compact
+    }
+}
+
+impl FromStr for Format {
+    type Err = io::Error;
+
+    fn from_str(input: &str) -> Result<Self, Self::Err> {
+        match input.to_lowercase().as_str() {
+            "compact" => Ok(Format::Compact),
+            "full" => Ok(Format::Full),
+            _ => Err(err!(Other, "parse format error"))
+        }
+    }
+}
+
+pub fn init_logging(config: &Config) -> io::Result<Logger> {
+    use slog::{ Drain, Logger };
+    use slog_term::{ CompactFormat, FullFormat, TermDecorator, PlainDecorator };
+    use slog_async::Async;
+
+    macro_rules! decorator {
+        ( plain $path:expr ) => {{
+            let file = OpenOptions::new()
+                .create(true)
+                .write(true)
+                .truncate(true)
+                .open($path)?;
+
+            PlainDecorator::new(file)
+        }};
+        ( term ) => {
+            TermDecorator::new().build()
+        };
+    }
+
+    macro_rules! drain {
+        ( choose $config:expr ) => {
+            if let Some(ref path) = $config.log_output {
+                drain!(format $config, decorator!(plain path))
+            } else {
+                drain!(format $config, decorator!(term))
+            }
+        };
+        ( format $config:expr, $decorator:expr ) => {
+            match $config.format.unwrap_or_default() {
+                Format::Compact => drain!(compact $decorator),
+                Format::Full => drain!(full $decorator)
+            }
+        };
+        ( compact $decorator:expr ) => {
+            drain!(async CompactFormat::new($decorator).build().fuse())
+        };
+        ( full $decorator:expr ) => {
+            drain!(async FullFormat::new($decorator).build().fuse())
+        };
+        ( async $drain:expr ) => {
+            Async::new($drain).build().fuse()
+        }
+    }
+
+
+    let drain = drain!(choose config);
+    Ok(Logger::root(drain, o!("version" => env!("CARGO_PKG_VERSION"))))
 }
