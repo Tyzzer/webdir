@@ -105,7 +105,7 @@ mod test {
         let fd = fs::File::open(tmp.path().join("test")).unwrap();
         let len = fd.metadata().unwrap().len();
 
-        let fd = File::new(fd, handle, len as _).unwrap();
+        let fd = File::new(fd, handle, len as _, 1 << 16).unwrap();
         let fut = fd.read(32..1021).unwrap()
             .map(|chunk| chunk.unwrap().to_vec())
             .concat2();

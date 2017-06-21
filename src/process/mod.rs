@@ -21,7 +21,7 @@ pub struct Process<'a> {
     httpd: &'a Httpd,
     log: &'a Logger,
     req: &'a Request,
-    depth: usize,
+    is_root: bool,
     path: Rc<PathBuf>
 }
 
@@ -31,7 +31,7 @@ impl<'a> Process<'a> {
         let path_buf = decode_path(req.path());
         let (depth, path) = path_canonicalize(&httpd.root, path_buf);
         let path = Rc::new(path);
-        Process { httpd, log, req, depth, path }
+        Process { httpd, log, req, path, is_root: depth == 0 }
     }
 
     #[inline]
@@ -63,7 +63,6 @@ impl<'a> Process<'a> {
             res.set_body(Body::empty());
         } else {
             let log = self.log.clone();
-            let is_root = self.depth == 0;
             let root = self.httpd.root.clone();
             let (send, body) = Body::pair();
             res.set_body(body);
@@ -71,7 +70,7 @@ impl<'a> Process<'a> {
             debug!(self.log, "process"; "method" => "senddir");
 
             let done = stream::once(Ok(chunk!(HTML_HEADER)))
-                .chain(stream::once(Ok(chunk!(into up(is_root)))))
+                .chain(stream::once(Ok(chunk!(into up(self.is_root)))))
                 .chain(stream::iter(SortDir::new(root, dir))
                     .map(|p| p.and_then(|m| chunk!(into m.render())).map_err(Into::into))
                 )

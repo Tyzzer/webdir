@@ -64,7 +64,7 @@ pub struct Config {
     pub chunk_length: Option<usize>,
 
     /// logging format
-    #[structopt(short = "f", long = "format", display_order = 7, possible_value = "compact", possible_value = "full")]
+    #[structopt(short = "f", long = "log-format", display_order = 7, possible_value = "compact", possible_value = "full")]
     pub format: Option<Format>,
 
     /// logging output

@@ -12,7 +12,7 @@ use ::utils::encode_path;
 
 
 pub type IoRREntry = io::Result<io::Result<Entry>>;
-pub const SORTDIR_BUFF_LENGTH: usize = 100;
+pub const SORTDIR_BUFF_LENGTH: usize = 1024;
 
 pub struct SortDir {
     root: Arc<PathBuf>,
