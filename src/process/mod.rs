@@ -90,7 +90,7 @@ impl<'a> Process<'a> {
     }
 
     fn process_file(&self, metadata: &Metadata) -> io::Result<Response> {
-        let entity = Entity::new(self.path.clone(), metadata, self.log);
+        let entity = Entity::new(self.path.clone(), metadata, self.log, self.httpd.chunk_length);
 
         match entity.check(self.req.headers()) {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
@@ -206,12 +206,11 @@ impl<'a> Process<'a> {
     #[cfg(feature = "sendfile")]
     fn send(&self, fd: &file::File, range: Option<Range<u64>>) -> io::Result<Response> {
         use futures::future;
-        use ::file::CHUNK_BUFF_LENGTH;
         let mut res = Response::new();
 
         if self.req.method() == &Head {
             res.set_body(Body::empty());
-        } else if let (&Some(ref socket), true) = (&self.httpd.socket, CHUNK_BUFF_LENGTH >= fd.len as _) {
+        } else if let (&Some(ref socket), true) = (&self.httpd.socket, self.httpd.chunk_length >= fd.len as _) {
             let range = range.unwrap_or_else(|| 0..fd.len);
             let log = self.log.clone();
             res.set_body(Body::empty());

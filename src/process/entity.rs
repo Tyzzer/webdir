@@ -21,6 +21,7 @@ pub struct Entity<'a> {
     path: Rc<PathBuf>,
     metadata: &'a Metadata,
     log: &'a Logger,
+    chunk_len: usize,
     len: u64,
     etag: header::EntityTag
 }
@@ -33,9 +34,9 @@ pub enum EntifyResult {
 }
 
 impl<'a> Entity<'a> {
-    pub fn new(path: Rc<PathBuf>, metadata: &'a Metadata, log: &'a Logger) -> Self {
+    pub fn new(path: Rc<PathBuf>, metadata: &'a Metadata, log: &'a Logger, chunk_len: usize) -> Self {
         let len = metadata.len();
-        Entity { path, metadata, log, len, etag: Self::etag(metadata) }
+        Entity { path, metadata, log, chunk_len, len, etag: Self::etag(metadata) }
     }
 
     #[cfg(unix)]
@@ -71,7 +72,7 @@ impl<'a> Entity<'a> {
     #[inline]
     pub fn open(&self, handle: Handle) -> io::Result<file::File> {
         let fd = fs::File::open(&*self.path)?;
-        file::File::new(fd, handle, self.len)
+        file::File::new(fd, handle, self.chunk_len, self.len)
     }
 
     pub fn headers(self, is_multipart: bool) -> Headers {

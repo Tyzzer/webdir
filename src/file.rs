@@ -12,22 +12,21 @@ use ::error;
 #[cfg(feature = "sendfile")] use ::sendfile::SendFileFut;
 
 
-pub const CHUNK_BUFF_LENGTH: usize = 1 << 16;
-
 pub struct File {
     fd: fs::File,
+    chunk_len: usize,
     pub len: u64
 }
 
 impl File {
     #[inline]
-    pub fn new(fd: fs::File, _handle: Handle, len: u64) -> io::Result<Self> {
-        Ok(File { fd, len })
+    pub fn new(fd: fs::File, _handle: Handle, chunk_len: usize, len: u64) -> io::Result<Self> {
+        Ok(File { fd, chunk_len, len })
     }
 
     pub fn read(&self, range: Range<u64>) -> io::Result<ReadChunkFut> {
         let fd = self.fd.try_clone()?;
-        let buf = vec![0; cmp::min(CHUNK_BUFF_LENGTH, self.len as _)];
+        let buf = vec![0; cmp::min(self.chunk_len, self.len as _)];
 
         Ok(ReadChunkFut { fd, range, buf })
     }

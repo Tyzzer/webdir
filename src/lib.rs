@@ -46,6 +46,7 @@ pub struct Httpd {
     pub remote: Remote,
     pub root: Arc<PathBuf>,
     pub log: Logger,
+    pub chunk_length: usize,
 
     #[cfg(feature = "sendfile")]
     pub socket: Option<Arc<BiLock<TcpStream>>>

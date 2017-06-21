@@ -42,40 +42,44 @@ use utils::{
 #[structopt]
 pub struct Config {
     /// bind address
-    #[structopt(short = "b", long = "bind", display_order(1))]
+    #[structopt(short = "b", long = "bind", display_order = 1)]
     pub addr: Option<SocketAddr>,
 
     /// root path
-    #[structopt(short = "r", long = "root", display_order(2))]
+    #[structopt(short = "r", long = "root", display_order = 2)]
     pub root: Option<String>,
 
     /// TLS certificate
-    #[structopt(long = "cert", requires = "key", display_order(3))]
+    #[structopt(long = "cert", requires = "key", display_order = 3)]
     pub cert: Option<String>,
     /// TLS key
-    #[structopt(long = "key", requires = "cert", display_order(4))]
+    #[structopt(long = "key", requires = "cert", display_order = 4)]
     pub key: Option<String>,
-    /// TLS session buffer length
-    #[structopt(long = "session-buff", requires = "cert", display_order(5))]
-    pub session_buff: Option<usize>,
+    /// TLS session buffer size
+    #[structopt(long = "session-buff", requires = "cert", display_order = 5)]
+    pub session_buff_size: Option<usize>,
 
-    /// disable keepalive
-    #[serde(default)]
-    #[structopt(long = "no-keepalive")]
-    pub no_keepalive: bool,
+    /// chunk length
+    #[structopt(long = "chunk-length", display_order = 6)]
+    pub chunk_length: Option<usize>,
 
     /// logging format
-    #[structopt(short = "f", long = "format", possible_value = "compact", possible_value = "full")]
+    #[structopt(short = "f", long = "format", display_order = 7, possible_value = "compact", possible_value = "full")]
     pub format: Option<Format>,
 
     /// logging output
-    #[structopt(short = "o", long = "log-output")]
+    #[structopt(short = "o", long = "log-output", display_order = 8)]
     pub log_output: Option<String>,
 
     /// read config from file
     #[serde(skip_serializing)]
-    #[structopt(short = "c", long = "config")]
-    pub config: Option<String>
+    #[structopt(short = "c", long = "config", display_order = 9)]
+    pub config: Option<String>,
+
+    /// disable keepalive
+    #[serde(default)]
+    #[structopt(long = "no-keepalive")]
+    pub no_keepalive: bool
 }
 
 
@@ -108,8 +112,11 @@ fn make_config() -> io::Result<Config> {
             args_config.key = config.key
                 .map(|p| path.with_file_name(p).to_string_lossy().into_owned());
         }
-        if args_config.session_buff.is_none() {
-            args_config.session_buff = config.session_buff;
+        if args_config.session_buff_size.is_none() {
+            args_config.session_buff_size = config.session_buff_size;
+        }
+        if args_config.chunk_length.is_none() {
+            args_config.chunk_length = config.chunk_length;
         }
         if args_config.format.is_none() {
             args_config.format = config.format;
@@ -131,7 +138,7 @@ fn start(config: Config) -> io::Result<()> {
     let maybe_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
         let mut tls_config = ServerConfig::new();
         tls_config.set_single_cert(load_certs(cert)?, load_keys(key)?.remove(0));
-        tls_config.set_persistence(ServerSessionMemoryCache::new(config.session_buff.unwrap_or(64)));
+        tls_config.set_persistence(ServerSessionMemoryCache::new(config.session_buff_size.unwrap_or(64)));
         Some(Arc::new(tls_config))
     } else {
         None
@@ -142,6 +149,7 @@ fn start(config: Config) -> io::Result<()> {
         else { Arc::new(env::current_dir()?) };
     let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0));
     let keepalive = !config.no_keepalive;
+    let chunk_length = config.chunk_length.unwrap_or(1 << 16);
 
     let mut core = Core::new()?;
     let handle = core.handle();
@@ -160,6 +168,7 @@ fn start(config: Config) -> io::Result<()> {
             remote: remote.clone(),
             root: root.clone(),
             log: log.clone(),
+            chunk_length: chunk_length,
             #[cfg(feature = "sendfile")] socket: None
         };
 
