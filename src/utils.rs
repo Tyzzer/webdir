@@ -1,7 +1,8 @@
 use std::mem;
 use std::ops::Add;
+use std::ffi::OsStr;
 use std::path::{ Path, PathBuf, Component };
-use url::percent_encoding::{ DEFAULT_ENCODE_SET, percent_encode, percent_decode };
+use percent_encoding::{ DEFAULT_ENCODE_SET, percent_encode, percent_decode };
 
 
 macro_rules! boundary {
@@ -102,18 +103,18 @@ fn test_u64_to_bytes() {
 
 #[cfg(unix)]
 #[inline]
-pub fn encode_path(path: &Path) -> String {
+pub fn encode_path(name: &OsStr) -> String {
     use std::os::unix::ffi::OsStrExt;
 
-    percent_encode(path.as_os_str().as_bytes(), DEFAULT_ENCODE_SET)
-        .fold(String::from("/"), Add::add)
+    percent_encode(name.as_bytes(), DEFAULT_ENCODE_SET)
+        .fold(String::from("./"), Add::add)
 }
 
 #[cfg(not(unix))]
 #[inline]
-pub fn encode_path(path: &Path) -> String {
-    percent_encode(path.to_string_lossy().as_bytes(), DEFAULT_ENCODE_SET)
-        .fold(String::from("/"), Add::add)
+pub fn encode_path(name: &OsStr) -> String {
+    percent_encode(name.to_string_lossy().as_bytes(), DEFAULT_ENCODE_SET)
+        .fold(String::from("./"), Add::add)
 }
 
 #[cfg(unix)]
@@ -137,12 +138,12 @@ pub fn decode_path(path: &str) -> PathBuf {
 
 #[test]
 fn test_encode_path() {
-    assert_eq!(encode_path(Path::new("aaa/bbb")), "/aaa/bbb");
-    assert_eq!(encode_path(Path::new("aaa/中文")), "/aaa/%E4%B8%AD%E6%96%87");
+    assert_eq!(encode_path(OsStr::new("aaa")), "./aaa");
+    assert_eq!(encode_path(OsStr::new("中文")), "./%E4%B8%AD%E6%96%87");
 }
 
 #[test]
 fn test_decode_path() {
-    assert_eq!(decode_path("aaa/bbb"), Path::new("aaa/bbb"));
-    assert_eq!(decode_path("%E4%B8%AD%E6%96%87/bbb"), Path::new("中文/bbb"));
+    assert_eq!(decode_path("aaa"), OsStr::new("aaa"));
+    assert_eq!(decode_path("%E4%B8%AD%E6%96%87"), OsStr::new("中文"));
 }

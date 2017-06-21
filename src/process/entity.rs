@@ -10,7 +10,7 @@ use hyper::header::ByteRangeSpec;
 use slog::Logger;
 use smallvec::SmallVec;
 use mime_guess::guess_mime_type;
-use metrohash::MetroHash;
+use siphasher::sip::SipHasher;
 use base64::{ URL_SAFE_NO_PAD, encode_config };
 use ::response::{ BOUNDARY, fail, not_modified };
 use ::utils::u64_to_bytes;
@@ -43,7 +43,7 @@ impl<'a> Entity<'a> {
     fn etag(metadata: &Metadata) -> header::EntityTag {
         use std::os::unix::fs::MetadataExt;
 
-        let mut hasher = MetroHash::default();
+        let mut hasher = SipHasher::default();
         hasher.write_u64(metadata.size());
         hasher.write_u64(metadata.ino());
         hasher.write_i64(metadata.mtime());
@@ -58,7 +58,7 @@ impl<'a> Entity<'a> {
     fn etag(metadata: &Metadata) -> header::EntityTag {
         use std::os::windows::fs::MetadataExt;
 
-        let mut hasher = MetroHash::default();
+        let mut hasher = SipHasher::default();
         hasher.write_u64(metadata.file_attributes());
         hasher.write_u64(metadata.creation_time());
         hasher.write_u64(metadata.last_write_time());
@@ -78,7 +78,7 @@ impl<'a> Entity<'a> {
     pub fn headers(self, is_multipart: bool) -> Headers {
         let mut headers = Headers::new();
 
-        headers.set(header::AcceptRanges(vec![header::RangeUnit::Bytes]));
+        headers.set(header::AcceptRanges(vec!(header::RangeUnit::Bytes)));
         headers.set(header::ETag(self.etag));
 
         if is_multipart {

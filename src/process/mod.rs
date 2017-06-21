@@ -63,7 +63,6 @@ impl<'a> Process<'a> {
             res.set_body(Body::empty());
         } else {
             let log = self.log.clone();
-            let root = self.httpd.root.clone();
             let (send, body) = Body::pair();
             res.set_body(body);
 
@@ -71,7 +70,7 @@ impl<'a> Process<'a> {
 
             let done = stream::once(Ok(chunk!(HTML_HEADER)))
                 .chain(stream::once(Ok(chunk!(into up(self.is_root)))))
-                .chain(stream::iter(SortDir::new(root, dir))
+                .chain(stream::iter(SortDir::new(dir))
                     .map(|p| p.and_then(|m| chunk!(into m.render())).map_err(Into::into))
                 )
                 .chain(stream::once(Ok(chunk!(HTML_FOOTER))))

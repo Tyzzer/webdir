@@ -1,12 +1,11 @@
 use std::{ io, fmt };
-use std::sync::Arc;
 use std::time::UNIX_EPOCH;
 use std::cmp::Ordering;
 use std::ffi::OsString;
-use std::path::{ PathBuf, Path };
 use std::fs::{ DirEntry, ReadDir, Metadata };
+use smallvec::SmallVec;
 use maud::{ Render, Markup };
-use chrono::{ TimeZone, UTC };
+use chrono::{ TimeZone, UTC, DateTime };
 use humanesort::HumaneOrder;
 use ::utils::encode_path;
 
@@ -15,13 +14,12 @@ pub type IoRREntry = io::Result<io::Result<Entry>>;
 pub const SORTDIR_BUFF_LENGTH: usize = 1024;
 
 pub struct SortDir {
-    root: Arc<PathBuf>,
     readdir: ReadDir,
-    buf: Vec<IoRREntry>
+    buf: SmallVec<[IoRREntry; 16]>
 }
 
 impl SortDir {
-    pub fn new(root: Arc<PathBuf>, mut readdir: ReadDir) -> Self {
+    pub fn new(mut readdir: ReadDir) -> Self {
         fn sort_by_entry(x: &IoRREntry, y: &IoRREntry) -> Ordering {
             if let (&Ok(Ok(ref x)), &Ok(Ok(ref y))) = (x, y) {
                 match Ord::cmp(&x.ty, &y.ty) {
@@ -38,12 +36,12 @@ impl SortDir {
 
         let mut buf = readdir
             .by_ref()
-            .map(|entry| entry.map(|p| Entry::new(&root, p)))
+            .map(|entry| entry.map(Entry::new))
             .take(SORTDIR_BUFF_LENGTH)
-            .collect::<Vec<_>>();
+            .collect::<SmallVec<_>>();
         buf.sort_unstable_by(|x, y| sort_by_entry(y, x));
 
-        SortDir { root, readdir, buf }
+        SortDir { readdir, buf }
     }
 }
 
@@ -56,9 +54,7 @@ impl Iterator for SortDir {
         } else {
             self.readdir
                 .next()
-                .map(|entry| entry
-                    .map(|p| Entry::new(&self.root, p))
-                )
+                .map(|entry| entry.map(Entry::new))
         }
     }
 }
@@ -88,12 +84,11 @@ impl fmt::Display for EntryType {
 pub struct Entry {
     pub metadata: Metadata,
     pub name: OsString,
-    pub uri: Option<String>,
     pub ty: EntryType
 }
 
 impl Entry {
-    pub fn new(base: &Path, entry: DirEntry) -> io::Result<Self> {
+    pub fn new(entry: DirEntry) -> io::Result<Self> {
         let mut metadata = entry.metadata()?;
         let path = entry.path();
         let name = entry.file_name();
@@ -117,23 +112,25 @@ impl Entry {
             }
         };
 
-        let uri = path.strip_prefix(base)
-            .map(encode_path)
-            .map(|p| if metadata.is_dir() { p + "/" } else { p })
-            .ok();
-
-        Ok(Entry { metadata, name, uri, ty })
+        Ok(Entry { metadata, name, ty })
     }
 
-    pub fn time(&self) -> io::Result<String> {
+    #[inline]
+    pub fn path(&self) -> String {
+        let p = encode_path(&self.name);
+        if self.metadata.is_dir() { p + "/" } else { p }
+    }
+
+    #[inline]
+    pub fn time(&self) -> io::Result<DateTime<UTC>> {
         self.metadata.modified()
             .and_then(|time| time.duration_since(UNIX_EPOCH)
                 .map_err(|err| err!(Other, err))
             )
             .map(|dur| UTC.timestamp(dur.as_secs() as _, 0))
-            .map(|time| time.to_string())
     }
 
+    #[inline]
     pub fn size(&self) -> String {
         use humansize::FileSize;
         use humansize::file_size_opts::BINARY;
@@ -149,11 +146,8 @@ impl Render for Entry {
             tr {
                 td class="icon" (self.ty)
 
-                td class="link" @if let Some(ref uri) = self.uri {
-                    a href=(uri) (self.name.to_string_lossy())
-                } @else {
-                    (self.name.to_string_lossy())
-                }
+                td class="link"
+                    a href=(self.path()) (self.name.to_string_lossy())
 
                 td small class="time" @if let Ok(time) = self.time() {
                     (time)
@@ -200,9 +194,8 @@ mod test {
         fs::File::create(tmp.path().join("test1")).unwrap();
         fs::File::create(tmp.path().join("test20")).unwrap();
 
-        let path = Arc::new(tmp.path().to_path_buf());
-        let readdir = path.read_dir().unwrap();
-        let output = SortDir::new(path, readdir)
+        let readdir = tmp.path().read_dir().unwrap();
+        let output = SortDir::new(readdir)
             .map(|entry| entry.unwrap().unwrap().name.to_string_lossy().into())
             .collect::<Vec<String>>();
         assert_eq!(output, ["test", "test3", "test10", "test1", "test20"]);
