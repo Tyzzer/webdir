@@ -1,21 +1,20 @@
 use std::{ io, fmt };
-use std::time::UNIX_EPOCH;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{ DirEntry, ReadDir, Metadata };
 use smallvec::SmallVec;
 use maud::{ Render, Markup };
-use chrono::{ TimeZone, UTC, DateTime };
+use chrono::{ Utc, DateTime };
 use humanesort::HumaneOrder;
 use ::utils::encode_path;
 
 
 pub type IoRREntry = io::Result<io::Result<Entry>>;
-pub const SORTDIR_BUFF_LENGTH: usize = 1024;
+pub const SORTDIR_BUFF_LENGTH: usize = 256;
 
 pub struct SortDir {
     readdir: ReadDir,
-    buf: SmallVec<[IoRREntry; 16]>
+    buf: SmallVec<[IoRREntry; 8]>
 }
 
 impl SortDir {
@@ -49,13 +48,11 @@ impl Iterator for SortDir {
     type Item = IoRREntry;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if let Some(entry) = self.buf.pop() {
-            Some(entry)
-        } else {
-            self.readdir
+        self.buf.pop()
+            .or_else(|| self.readdir
                 .next()
                 .map(|entry| entry.map(Entry::new))
-        }
+            )
     }
 }
 
@@ -122,12 +119,9 @@ impl Entry {
     }
 
     #[inline]
-    pub fn time(&self) -> io::Result<DateTime<UTC>> {
+    pub fn time(&self) -> io::Result<DateTime<Utc>> {
         self.metadata.modified()
-            .and_then(|time| time.duration_since(UNIX_EPOCH)
-                .map_err(|err| err!(Other, err))
-            )
-            .map(|dur| UTC.timestamp(dur.as_secs() as _, 0))
+            .map(Into::into)
     }
 
     #[inline]

@@ -1,4 +1,4 @@
-#![feature(attr_literals, struct_field_attributes)]
+#![feature(attr_literals)]
 
 #[macro_use] extern crate slog;
 extern crate slog_term;

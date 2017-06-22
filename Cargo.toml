@@ -25,7 +25,6 @@ structopt = "0.0.5"
 structopt-derive = "0.0.5"
 error-chain = "0.10"
 
-nix = { version = "0.8", optional = true }
 libc = "0.2"
 bytes = "0.4"
 futures = "0.1"
@@ -39,7 +38,7 @@ rustls = "0.9"
 tokio-rustls = "0.2"
 
 percent-encoding = "1.0"
-chrono = "0.3"
+chrono = "0.4"
 humansize = "1.0"
 humanesort = "0.1.0-alpha"
 base64 = "0.6"
@@ -53,6 +52,8 @@ maud_macros = "0.16"
 slog = "2.0"
 slog-async = "2.0"
 slog-term = "2.0"
+
+nix = { version = "0.8", optional = true }
 
 [dev-dependencies]
 tempdir = "0.3"

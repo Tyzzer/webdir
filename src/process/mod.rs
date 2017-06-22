@@ -77,7 +77,7 @@ impl<'a> Process<'a> {
                 .map_err(error::Error::from)
                 .forward(send)
                 .map(drop)
-                .map_err(move |err| debug!(log, "send"; "err" => format_args!("{}", err)));
+                .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
             self.httpd.remote.spawn(move |_| done);
         }
