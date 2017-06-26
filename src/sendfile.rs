@@ -62,11 +62,11 @@ impl Stream for SendFileFut {
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        #[cfg(all(unix, not(any(target_os = "macos", target_os = "ios"))))]
+        #[cfg(any(target_os = "linux", target_os = "android"))]
         use nix::sys::sendfile::sendfile;
 
-        #[cfg(any(target_os = "macos", target_os = "ios"))]
-        use self::macos::sendfile;
+        #[cfg(any(apple, freebsdlike))]
+        use self::bsd::sendfile;
 
 
         if self.count == 0 {
@@ -102,18 +102,29 @@ impl Stream for SendFileFut {
 }
 
 
-#[cfg(any(target_os = "macos", target_os = "ios"))]
-mod macos {
+#[cfg(any(apple, freebsdlike))]
+mod bsd {
     use std::ptr;
     use std::os::unix::io::RawFd;
-    use libc::{ off_t, sendfile as raw_sendfile };
+    use libc::{ off_t, sendfile as __sendfile };
     use nix;
 
+    #[cfg(apple)]
     pub fn sendfile(out_fd: RawFd, in_fd: RawFd, offset: Option<&mut off_t>, count: usize) -> nix::Result<usize> {
         let &mut offset = offset.unwrap_or(&mut 0);
         let mut len = count as _;
-        match unsafe { raw_sendfile(out_fd, in_fd, offset, &mut len, ptr::null_mut(), 0) } {
-            0 => Ok(count - len as usize),
+        match unsafe { __sendfile(in_fd, out_fd, offset, &mut len, ptr::null_mut(), 0) } {
+            0 => Ok(len as usize),
+            _ => Err(nix::Error::last())
+        }
+    }
+
+    #[cfg(freebsdlike)]
+    pub fn sendfile(out_fd: RawFd, in_fd: RawFd, offset: Option<&mut off_t>, count: usize) -> nix::Result<usize> {
+        let &mut offset = offset.unwrap_or(&mut 0);
+        let mut len = count as _;
+        match unsafe { __sendfile(in_fd, out_fd, offset, count, ptr::null_mut(), &mut len, 0) } {
+            0 => Ok(len as _),
             _ => Err(nix::Error::last())
         }
     }

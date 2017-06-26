@@ -7,6 +7,7 @@ repository = "https://github.com/Tyzzer/webdir"
 homepage = "https://github.com/Tyzzer/webdir"
 readme = "README.md"
 description = "A simple asynchronous static file server"
+build = "build.rs"
 
 [[bin]]
 name = "webdir"
