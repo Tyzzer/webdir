@@ -54,7 +54,7 @@ pub struct SendFileFut {
     pub socket: Arc<BiLock<TcpStream>>,
     pub fd: fs::File,
     pub offset: off_t,
-    pub count: usize
+    pub end: usize
 }
 
 impl Stream for SendFileFut {
@@ -69,9 +69,10 @@ impl Stream for SendFileFut {
         use self::bsd::sendfile;
 
 
-        if self.count == 0 {
-            return Ok(Async::Ready(None))
-        }
+        let count = match self.end.checked_sub(self.offset as usize) {
+            Some(0) | None => return Ok(Async::Ready(None)),
+            Some(count) => count
+        };
 
         let socket = match self.socket.poll_lock() {
             Async::Ready(socket) => socket,
@@ -82,13 +83,9 @@ impl Stream for SendFileFut {
             return Ok(Async::NotReady)
         }
 
-        match sendfile(
-            socket.as_raw_fd(), self.fd.as_raw_fd(),
-            Some(&mut self.offset), self.count
-        ) {
-            Ok(read_len) => {
-                self.count -= read_len;
-                Ok(Async::Ready(Some(read_len)))
+        match sendfile(socket.as_raw_fd(), self.fd.as_raw_fd(), Some(&mut self.offset), count) {
+            Ok(len) => {
+                Ok(Async::Ready(Some(len)))
             },
             Err(ref err) if nix::Errno::EAGAIN == err.errno() => {
                 // TODO https://github.com/tokio-rs/tokio-core/issues/196
@@ -109,22 +106,24 @@ mod bsd {
     use libc::{ off_t, sendfile as __sendfile };
     use nix;
 
-    #[cfg(apple)]
     pub fn sendfile(out_fd: RawFd, in_fd: RawFd, offset: Option<&mut off_t>, count: usize) -> nix::Result<usize> {
-        let &mut offset = offset.unwrap_or(&mut 0);
+        let off =
+            if let Some(ref off) = offset { **off }
+            else { 0 };
         let mut len = count as _;
-        match unsafe { __sendfile(in_fd, out_fd, offset, &mut len, ptr::null_mut(), 0) } {
-            0 => Ok(len as usize),
-            _ => Err(nix::Error::last())
-        }
-    }
 
-    #[cfg(freebsdlike)]
-    pub fn sendfile(out_fd: RawFd, in_fd: RawFd, offset: Option<&mut off_t>, count: usize) -> nix::Result<usize> {
-        let &mut offset = offset.unwrap_or(&mut 0);
-        let mut len = count as _;
-        match unsafe { __sendfile(in_fd, out_fd, offset, count, ptr::null_mut(), &mut len, 0) } {
-            0 => Ok(len as _),
+        #[cfg(apple)]
+        let ret = unsafe { __sendfile(in_fd, out_fd, off, &mut len, ptr::null_mut(), 0) };
+
+        #[cfg(freebsdlike)]
+        let ret = unsafe { __sendfile(in_fd, out_fd, off, count, ptr::null_mut(), &mut len, 0) };
+
+        if let Some(offset) = offset {
+            *offset += len;
+        }
+
+        match ret {
+            0 => Ok(len as usize),
             _ => Err(nix::Error::last())
         }
     }

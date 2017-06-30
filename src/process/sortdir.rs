@@ -175,7 +175,6 @@ mod test {
     extern crate tempdir;
 
     use std::fs;
-    use std::sync::Arc;
     use self::tempdir::TempDir;
     use super::*;
 

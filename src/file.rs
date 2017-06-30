@@ -37,7 +37,7 @@ impl File {
         Ok(SendFileFut {
             socket, fd,
             offset: range.start as _,
-            count: (range.end - range.start) as _
+            end: range.end as _
         })
     }
 }
