@@ -34,7 +34,7 @@ pub fn read_config() -> Option<PathBuf> {
             .and_then(|xdg| xdg.find_config_file(CONFIG_NAME))
         )
         .or_else(|| env::home_dir()
-            .map(|home| home.join(CONFIG_NAME))
+            .map(|home| home.join(format!(".{}", CONFIG_NAME)))
             .and_then(|path|
                 if path.is_file() { Some(path) }
                 else { None }
