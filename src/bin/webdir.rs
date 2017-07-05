@@ -1,5 +1,7 @@
+#![cfg_attr(feature = "sysalloc", feature(alloc_system))]
 #![feature(attr_literals)]
 
+#[cfg(feature = "sysalloc")] extern crate alloc_system;
 #[macro_use] extern crate slog;
 extern crate slog_term;
 extern crate slog_async;
@@ -100,33 +102,29 @@ fn make_config() -> io::Result<Config> {
         let config = toml::from_slice::<Config>(&buff)
             .map_err(|err| err!(Other, err))?;
 
-        if args_config.addr.is_none() {
-            args_config.addr = config.addr;
+        macro_rules! merge_config {
+            ( $option:ident -> $block:expr ) => {
+                if args_config.$option.is_none() {
+                    args_config.$option = config.$option
+                        .map($block);
+                }
+            };
+            ( $option:ident ) => {
+                if args_config.$option.is_none() {
+                    args_config.$option = config.$option;
+                }
+            };
         }
-        if args_config.root.is_none() {
-            args_config.root = config.root
-                .map(|p| path.with_file_name(p).to_string_lossy().into_owned());
-        }
-        if args_config.cert.is_none() {
-            args_config.cert = config.cert
-                .map(|p| path.with_file_name(p).to_string_lossy().into_owned());
-        }
-        if args_config.key.is_none() {
-            args_config.key = config.key
-                .map(|p| path.with_file_name(p).to_string_lossy().into_owned());
-        }
-        if args_config.session_buff_size.is_none() {
-            args_config.session_buff_size = config.session_buff_size;
-        }
-        if args_config.chunk_length.is_none() {
-            args_config.chunk_length = config.chunk_length;
-        }
-        if args_config.format.is_none() {
-            args_config.format = config.format;
-        }
-        if args_config.log_output.is_none() {
-            args_config.log_output = config.log_output;
-        }
+
+        merge_config!(addr);
+        merge_config!(session_buff_size);
+        merge_config!(chunk_length);
+        merge_config!(format);
+        merge_config!(log_output);
+        merge_config!(root -> |p| path.with_file_name(p).to_string_lossy().into_owned());
+        merge_config!(cert -> |p| path.with_file_name(p).to_string_lossy().into_owned());
+        merge_config!(key -> |p| path.with_file_name(p).to_string_lossy().into_owned());
+
         if args_config.no_keepalive {
             args_config.keepalive = Some(false);
         } else {

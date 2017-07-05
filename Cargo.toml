@@ -16,6 +16,7 @@ doc = false
 
 [features]
 sendfile = [ "nix" ]
+sysalloc = []
 
 [dependencies]
 xdg = "2.1"
@@ -29,7 +30,6 @@ error-chain = "0.10"
 libc = "0.2"
 bytes = "0.4"
 futures = "0.1"
-futures-cpupool = "0.1"
 tokio-io = "0.1"
 tokio-core = "0.1"
 tokio-proto = "0.1"
