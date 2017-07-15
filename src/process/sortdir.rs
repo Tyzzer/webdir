@@ -114,8 +114,11 @@ impl Entry {
 
     #[inline]
     pub fn path(&self) -> String {
-        let p = encode_path(&self.name);
-        if self.metadata.is_dir() { p + "/" } else { p }
+        let mut p = encode_path(&self.name);
+        if self.metadata.is_dir() {
+            p.push('/');
+        }
+        p
     }
 
     #[inline]
@@ -126,11 +129,10 @@ impl Entry {
 
     #[inline]
     pub fn size(&self) -> String {
-        use humansize::FileSize;
-        use humansize::file_size_opts::BINARY;
+        use unbytify::bytify;
 
-        FileSize::file_size(&self.metadata.len(), BINARY)
-            .unwrap_or_else(|err| err)
+        let (value, unit) = bytify(self.metadata.len());
+        format!("{} {}", value, unit)
     }
 }
 
@@ -143,8 +145,8 @@ impl Render for Entry {
                 td class="link"
                     a href=(self.path()) (self.name.to_string_lossy())
 
-                td small class="time" @if let Ok(time) = self.time() {
-                    (time)
+                td class="time" small @if let Ok(time) = self.time() {
+                    (time.format("%F %T UTC"))
                 } @else {
                     "-"
                 }

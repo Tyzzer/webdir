@@ -1,4 +1,4 @@
-#![feature(plugin, sort_unstable)]
+#![feature(plugin)]
 #![plugin(maud_macros)]
 
 #[macro_use] extern crate error_chain;
@@ -13,7 +13,7 @@ extern crate hyper;
 extern crate maud;
 extern crate percent_encoding;
 extern crate chrono;
-extern crate humansize;
+extern crate unbytify;
 extern crate humanesort;
 extern crate mime;
 extern crate mime_guess;

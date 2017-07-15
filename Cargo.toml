@@ -40,7 +40,7 @@ tokio-rustls = "0.2"
 
 percent-encoding = "1.0"
 chrono = "0.4"
-humansize = "1.0"
+unbytify = "0.1"
 humanesort = "0.1.0-alpha"
 base64 = "0.6"
 siphasher = "0.2"
