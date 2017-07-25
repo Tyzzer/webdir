@@ -190,11 +190,11 @@ fn start(config: Config) -> io::Result<()> {
 
             handle.spawn(done);
         } else {
-            #[cfg(feature = "sendfile")]
-            let run = |mut httpd: Httpd| {
+            #[cfg(feature = "sendfile")] {
                 use futures::sync::BiLock;
                 use webdir::sendfile::BiTcpStream;
 
+                let mut httpd = httpd;
                 let (stream, stream2) = BiLock::new(stream);
                 let handle2 = handle.clone();
                 httpd.socket = Some(Arc::new(stream2));
@@ -210,13 +210,9 @@ fn start(config: Config) -> io::Result<()> {
             };
 
             #[cfg(not(feature = "sendfile"))]
-            let run = |httpd| {
-                Http::new()
-                    .keep_alive(keepalive)
-                    .bind_connection(&handle, stream, addr, httpd)
-            };
-
-            run(httpd);
+            Http::new()
+                .keep_alive(keepalive)
+                .bind_connection(&handle, stream, addr, httpd);
         }
 
         Ok(())
