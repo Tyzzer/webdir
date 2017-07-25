@@ -87,7 +87,7 @@ impl Stream for SendFileFut {
             Ok(len) => {
                 Ok(Async::Ready(Some(len)))
             },
-            Err(ref err) if nix::Errno::EAGAIN == err.errno() => {
+            Err(ref err) if &nix::Error::Sys(nix::Errno::EAGAIN) == err => {
                 // TODO https://github.com/tokio-rs/tokio-core/issues/196
                 // socket.need_write();
 
