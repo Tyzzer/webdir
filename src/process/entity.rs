@@ -1,8 +1,7 @@
 use std::{ io, cmp, fs };
-use std::rc::Rc;
 use std::ops::Range;
 use std::hash::Hasher;
-use std::path::PathBuf;
+use std::path::Path;
 use std::fs::Metadata;
 use tokio_core::reactor::Handle;
 use hyper::{ header, Headers, Response, StatusCode };
@@ -17,10 +16,10 @@ use ::utils::u64_to_bytes;
 use ::file;
 
 
-pub struct Entity<'a> {
-    path: Rc<PathBuf>,
+pub struct Entity<'a, 'b> {
     metadata: &'a Metadata,
     log: &'a Logger,
+    path: &'b Path,
     chunk_len: usize,
     len: u64,
     etag: header::EntityTag
@@ -33,8 +32,8 @@ pub enum EntifyResult {
     Vec(Vec<Range<u64>>)
 }
 
-impl<'a> Entity<'a> {
-    pub fn new(path: Rc<PathBuf>, metadata: &'a Metadata, log: &'a Logger, chunk_len: usize) -> Self {
+impl<'a, 'b> Entity<'a, 'b> {
+    pub fn new(path: &'b Path, metadata: &'a Metadata, log: &'a Logger, chunk_len: usize) -> Self {
         let len = metadata.len();
         Entity { path, metadata, log, chunk_len, len, etag: Self::etag(metadata) }
     }

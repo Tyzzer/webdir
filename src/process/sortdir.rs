@@ -123,8 +123,7 @@ impl Entry {
 
     #[inline]
     pub fn time(&self) -> io::Result<DateTime<Utc>> {
-        self.metadata.modified()
-            .map(Into::into)
+        self.metadata.modified().map(Into::into)
     }
 
     #[inline]

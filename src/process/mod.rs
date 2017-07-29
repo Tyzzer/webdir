@@ -4,7 +4,6 @@ mod entity;
 use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::fs::{ Metadata, ReadDir };
 use futures::{ stream, Stream, Future };
 use hyper::{ header, Request, Response, Head, Body, StatusCode };
@@ -22,7 +21,7 @@ pub struct Process<'a> {
     log: &'a Logger,
     req: &'a Request,
     is_root: bool,
-    path: Rc<PathBuf>
+    path: PathBuf
 }
 
 impl<'a> Process<'a> {
@@ -30,7 +29,6 @@ impl<'a> Process<'a> {
     pub fn new(httpd: &'a Httpd, log: &'a Logger, req: &'a Request) -> Process<'a> {
         let path_buf = decode_path(req.path());
         let (depth, path) = path_canonicalize(&httpd.root, path_buf);
-        let path = Rc::new(path);
         Process { httpd, log, req, path, is_root: depth == 0 }
     }
 
@@ -88,7 +86,7 @@ impl<'a> Process<'a> {
     }
 
     fn process_file(&self, metadata: &Metadata) -> io::Result<Response> {
-        let entity = Entity::new(self.path.clone(), metadata, self.log, self.httpd.chunk_length);
+        let entity = Entity::new(&self.path, metadata, self.log, self.httpd.chunk_length);
 
         match entity.check(self.req.headers()) {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
@@ -140,7 +138,7 @@ impl<'a> Process<'a> {
                 let (send, body) = Body::pair();
                 res.set_body(body);
 
-                let content_type = header::ContentType(guess_mime_type(&*self.path));
+                let content_type = header::ContentType(guess_mime_type(&self.path));
 
                 let done = stream::iter::<_, _, error::Error>(ranges.into_iter().map(Ok))
                     .and_then(move |range| {
