@@ -59,9 +59,9 @@ impl Iterator for SortDir {
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum EntryType {
+    Symlink,
     Dir,
     File,
-    Symlink,
     Other
 }
 
