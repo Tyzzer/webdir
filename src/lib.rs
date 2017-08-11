@@ -1,5 +1,4 @@
-#![feature(plugin)]
-#![plugin(maud_macros)]
+#![feature(proc_macro)]
 
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate slog;

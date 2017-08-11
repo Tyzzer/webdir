@@ -3,7 +3,7 @@ use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::fs::{ DirEntry, ReadDir, Metadata };
 use smallvec::SmallVec;
-use maud::{ Render, Markup };
+use maud::{ html, Render, Markup };
 use chrono::{ Utc, DateTime };
 use humanesort::HumaneOrder;
 use ::utils::encode_path;

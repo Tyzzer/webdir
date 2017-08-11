@@ -1,6 +1,7 @@
 use std::{ io, fmt };
 use hyper::{ header, StatusCode, Response };
 use slog::Logger;
+use maud::html;
 
 
 pub const BOUNDARY: &str = boundary!();
