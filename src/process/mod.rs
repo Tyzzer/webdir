@@ -66,9 +66,9 @@ impl<'a> Process<'a> {
 
             debug!(self.log, "process"; "method" => "senddir");
 
-            let done = stream::once(Ok(chunk!(HTML_HEADER)))
+            let done = stream::once::<_, error::Error>(Ok(chunk!(HTML_HEADER)))
                 .chain(stream::once(Ok(chunk!(into up(self.is_root)))))
-                .chain(stream::iter(SortDir::new(dir))
+                .chain(stream::iter_ok(SortDir::new(dir))
                     .map(|p| p.and_then(|m| chunk!(into m.render())).map_err(Into::into))
                 )
                 .chain(stream::once(Ok(chunk!(HTML_FOOTER))))
@@ -140,7 +140,7 @@ impl<'a> Process<'a> {
 
                 let content_type = header::ContentType(guess_mime_type(&self.path));
 
-                let done = stream::iter::<_, _, error::Error>(ranges.into_iter().map(Ok))
+                let done = stream::iter_ok::<_, error::Error>(ranges.into_iter())
                     .and_then(move |range| {
                         let len = range.end - range.start;
                         let mut headers = header::Headers::new();

@@ -44,46 +44,46 @@ use utils::{
 #[structopt]
 pub struct Config {
     /// bind address
-    #[structopt(short = "b", long = "bind", display_order = 1)]
+    #[structopt(short="b", long="bind", display_order=1)]
     pub addr: Option<SocketAddr>,
 
     /// root path
-    #[structopt(short = "r", long = "root", display_order = 2)]
+    #[structopt(short="r", long="root", display_order=2)]
     pub root: Option<String>,
 
     /// TLS certificate
-    #[structopt(long = "cert", requires = "key", display_order = 3)]
+    #[structopt(long="cert", requires="key", display_order=3)]
     pub cert: Option<String>,
     /// TLS key
-    #[structopt(long = "key", requires = "cert", display_order = 4)]
+    #[structopt(long="key", requires="cert", display_order=4)]
     pub key: Option<String>,
     /// TLS session buffer size
-    #[structopt(long = "session-buff", requires = "cert", display_order = 5)]
+    #[structopt(long="session-buff", requires="cert", display_order=5)]
     pub session_buff_size: Option<usize>,
 
     /// chunk length
-    #[structopt(long = "chunk-length", display_order = 6)]
+    #[structopt(long="chunk-length", display_order=6)]
     pub chunk_length: Option<usize>,
 
     /// logging format
-    #[structopt(short = "f", long = "log-format", display_order = 7, possible_value = "compact", possible_value = "full")]
+    #[structopt(short="f", long="log-format", display_order=7, possible_value="compact", possible_value="full")]
     pub format: Option<Format>,
 
     /// logging output
-    #[structopt(short = "o", long = "log-output", display_order = 8)]
+    #[structopt(short="o", long="log-output", display_order=8)]
     pub log_output: Option<String>,
 
     /// read config from file
     #[serde(skip_serializing)]
-    #[structopt(short = "c", long = "config", display_order = 9)]
+    #[structopt(short="c", long="config", display_order=9)]
     pub config: Option<String>,
 
     /// disable keepalive
     #[serde(skip_serializing, default)]
-    #[structopt(long = "no-keepalive")]
+    #[structopt(long="no-keepalive")]
     pub no_keepalive: bool,
 
-    #[structopt(hidden = true)]
+    #[structopt(hidden=true)]
     pub keepalive: Option<bool>
 }
 

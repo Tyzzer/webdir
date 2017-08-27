@@ -9,18 +9,18 @@ use humanesort::HumaneOrder;
 use ::utils::encode_path;
 
 
-pub type IoRREntry = io::Result<io::Result<Entry>>;
-pub const SORTDIR_BUFF_LENGTH: usize = 256;
+pub type IoREntry = io::Result<Entry>;
+pub const SORTDIR_BUFF_LENGTH: usize = 1 << 12;
 
 pub struct SortDir {
     readdir: ReadDir,
-    buf: SmallVec<[IoRREntry; 8]>
+    buf: SmallVec<[IoREntry; 12]>
 }
 
 impl SortDir {
     pub fn new(mut readdir: ReadDir) -> Self {
-        fn sort_by_entry(x: &IoRREntry, y: &IoRREntry) -> Ordering {
-            if let (&Ok(Ok(ref x)), &Ok(Ok(ref y))) = (x, y) {
+        fn sort_by_entry(x: &IoREntry, y: &IoREntry) -> Ordering {
+            if let (&Ok(ref x), &Ok(ref y)) = (x, y) {
                 match Ord::cmp(&x.ty, &y.ty) {
                     Ordering::Equal => HumaneOrder::humane_cmp(
                         &x.name.to_string_lossy(),
@@ -35,7 +35,7 @@ impl SortDir {
 
         let mut buf = readdir
             .by_ref()
-            .map(|entry| entry.map(Entry::new))
+            .map(|entry| entry.and_then(Entry::new))
             .take(SORTDIR_BUFF_LENGTH)
             .collect::<SmallVec<_>>();
         buf.sort_unstable_by(|x, y| sort_by_entry(y, x));
@@ -45,13 +45,13 @@ impl SortDir {
 }
 
 impl Iterator for SortDir {
-    type Item = IoRREntry;
+    type Item = IoREntry;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.buf.pop()
             .or_else(|| self.readdir
                 .next()
-                .map(|entry| entry.map(Entry::new))
+                .map(|entry| entry.and_then(Entry::new))
             )
     }
 }
@@ -190,7 +190,7 @@ mod test {
 
         let readdir = tmp.path().read_dir().unwrap();
         let output = SortDir::new(readdir)
-            .map(|entry| entry.unwrap().unwrap().name.to_string_lossy().into())
+            .map(|entry| entry.unwrap().name.to_string_lossy().into())
             .collect::<Vec<String>>();
         assert_eq!(output, ["test", "test3", "test10", "test1", "test20"]);
     }

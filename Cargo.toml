@@ -35,8 +35,8 @@ tokio-core = "0.1"
 tokio-proto = "0.1"
 hyper = "0.11"
 
-rustls = "0.9"
-tokio-rustls = "0.2"
+rustls = "0.10"
+tokio-rustls = "0.3"
 
 percent-encoding = "1.0"
 chrono = "0.4"
@@ -48,7 +48,6 @@ smallvec = "0.4"
 mime = "0.3"
 mime_guess = "2.0.0-alpha.1"
 maud = "0.17"
-# maud = { path = "../../rust/fork/maud/maud" }
 
 slog = "2.0"
 slog-async = "2.0"
