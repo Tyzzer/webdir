@@ -1,4 +1,3 @@
-extern crate libc;
 extern crate bytes;
 
 use std::{ io, fs };
@@ -9,7 +8,7 @@ use futures::sync::{ BiLock, BiLockAcquired };
 use tokio_io::{ AsyncRead, AsyncWrite };
 use tokio_core::net::TcpStream;
 use nix;
-use self::libc::off_t;
+use nix::libc::off_t;
 use self::bytes::buf::{ Buf, BufMut };
 use ::error;
 
@@ -106,7 +105,7 @@ impl Stream for SendFileFut {
 mod bsd {
     use std::ptr;
     use std::os::unix::io::RawFd;
-    use libc::{ off_t, sendfile as __sendfile };
+    use nix::libc::{ off_t, sendfile as __sendfile };
     use nix;
 
     pub fn sendfile(out_fd: RawFd, in_fd: RawFd, offset: Option<&mut off_t>, count: usize) -> nix::Result<usize> {
