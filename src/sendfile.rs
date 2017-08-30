@@ -1,13 +1,16 @@
+extern crate libc;
+extern crate bytes;
+
 use std::{ io, fs };
 use std::sync::Arc;
 use std::os::unix::io::AsRawFd;
-use libc::off_t;
-use bytes::buf::{ Buf, BufMut };
 use futures::{ Poll, Stream, Async };
 use futures::sync::{ BiLock, BiLockAcquired };
 use tokio_io::{ AsyncRead, AsyncWrite };
 use tokio_core::net::TcpStream;
 use nix;
+use self::libc::off_t;
+use self::bytes::buf::{ Buf, BufMut };
 use ::error;
 
 

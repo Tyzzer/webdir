@@ -8,4 +8,4 @@ os:
 
 script:
     - cargo test
-    - cargo check --features sendfile
+    - cargo check --all-features

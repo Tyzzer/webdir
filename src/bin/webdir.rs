@@ -1,4 +1,4 @@
-#![cfg_attr(feature = "sysalloc", feature(alloc_system))]
+#![cfg_attr(feature = "sysalloc", feature(alloc_system, global_allocator, allocator_api))]
 #![feature(attr_literals)]
 
 #[cfg(feature = "sysalloc")] extern crate alloc_system;
@@ -8,7 +8,6 @@ extern crate slog_async;
 #[macro_use] extern crate structopt_derive;
 extern crate structopt;
 #[macro_use] extern crate serde_derive;
-extern crate serde;
 extern crate xdg;
 extern crate toml;
 extern crate futures;
@@ -38,6 +37,10 @@ use utils::{
     Format,
     read_config, init_logging, load_certs, load_keys
 };
+
+#[cfg(feature = "sysalloc")]
+#[global_allocator]
+static GLOBAL: alloc_system::System = alloc_system::System;
 
 
 #[derive(StructOpt, Deserialize)]

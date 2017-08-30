@@ -3,8 +3,6 @@
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate slog;
 #[cfg(feature = "sendfile")] extern crate nix;
-extern crate libc;
-extern crate bytes;
 extern crate futures;
 extern crate tokio_io;
 extern crate tokio_core;
@@ -14,7 +12,6 @@ extern crate percent_encoding;
 extern crate chrono;
 extern crate unbytify;
 extern crate humanesort;
-extern crate mime;
 extern crate mime_guess;
 extern crate siphasher;
 extern crate base64;
