@@ -18,8 +18,10 @@ doc = false
 sendfile = [ "nix" ]
 sysalloc = []
 
-[dependencies]
+[target.'cfg(unix)'.dependencies]
 xdg = "2.1"
+
+[dependencies]
 toml = "0.4"
 serde = "1.0"
 serde_derive = "1.0"
@@ -27,7 +29,6 @@ structopt = "0.1"
 structopt-derive = "0.1"
 error-chain = "0.11.0-rc"
 
-libc = "0.2"
 bytes = "0.4"
 futures = "0.1"
 tokio-io = "0.1"

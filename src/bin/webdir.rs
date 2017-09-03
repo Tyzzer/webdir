@@ -2,13 +2,13 @@
 #![feature(attr_literals)]
 
 #[cfg(feature = "sysalloc")] extern crate alloc_system;
+#[cfg(unix)] extern crate xdg;
 #[macro_use] extern crate slog;
 extern crate slog_term;
 extern crate slog_async;
 #[macro_use] extern crate structopt_derive;
 extern crate structopt;
 #[macro_use] extern crate serde_derive;
-extern crate xdg;
 extern crate toml;
 extern crate futures;
 extern crate hyper;

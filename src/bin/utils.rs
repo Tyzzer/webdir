@@ -20,6 +20,7 @@ pub fn load_keys(path: &str) -> io::Result<Vec<PrivateKey>> {
         .map_err(|_| err!(Other, "Not found keys"))
 }
 
+#[cfg(unix)]
 #[inline]
 pub fn read_config() -> Option<PathBuf> {
     use std::env;
@@ -40,6 +41,12 @@ pub fn read_config() -> Option<PathBuf> {
                 else { None }
             )
         )
+}
+
+#[cfg(windows)]
+#[inline]
+pub fn read_config() -> Option<PathBuf> {
+    None
 }
 
 

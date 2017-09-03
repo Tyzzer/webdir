@@ -58,7 +58,7 @@ impl<'a, 'b> Entity<'a, 'b> {
         use std::os::windows::fs::MetadataExt;
 
         let mut hasher = SipHasher::default();
-        hasher.write_u64(metadata.file_attributes());
+        hasher.write_u64(metadata.file_attributes() as _);
         hasher.write_u64(metadata.creation_time());
         hasher.write_u64(metadata.last_write_time());
         hasher.write_u64(metadata.file_size());
