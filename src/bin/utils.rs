@@ -43,7 +43,7 @@ pub fn read_config() -> Option<PathBuf> {
         )
 }
 
-#[cfg(windows)]
+#[cfg(not(unix))]
 #[inline]
 pub fn read_config() -> Option<PathBuf> {
     None

@@ -175,7 +175,7 @@ fn start(config: Config) -> io::Result<()> {
         let log = log.new(o!("addr" => format!("{}", addr)));
         let httpd = Httpd {
             remote: remote.clone(),
-            root: root.clone(),
+            root: Arc::clone(&root),
             log: log.clone(),
             chunk_length: chunk_length,
             #[cfg(feature = "sendfile")] socket: None

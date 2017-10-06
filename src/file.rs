@@ -68,7 +68,7 @@ impl Stream for ReadChunkFut {
             #[cfg(windows)]
             let read_len = self.fd.seek_read(window.as_mut(), self.range.start)?;
 
-            self.range.start += read_len as _;
+            self.range.start += read_len as u64;
             window.set_end(read_len);
             let chunk = Vec::from(window.as_ref());
             let chunk = hyper::Chunk::from(chunk);
