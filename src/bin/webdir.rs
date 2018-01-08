@@ -1,5 +1,5 @@
 #![cfg_attr(feature = "sysalloc", feature(alloc_system, global_allocator, allocator_api))]
-#![feature(attr_literals)]
+#![feature(attr_literals, ip_constructors)]
 
 #[cfg(feature = "sysalloc")] extern crate alloc_system;
 #[cfg(unix)] extern crate xdg;
@@ -27,10 +27,12 @@ use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
 use std::path::{ Path, PathBuf };
 use structopt::StructOpt;
 use futures::{ Future, Stream };
+use hyper::Chunk;
 use hyper::server::Http;
+use hyper::error::Error as HyperError;
 use tokio_core::reactor::Core;
 use tokio_core::net::TcpListener;
-use rustls::{ ServerConfig, ServerSessionMemoryCache };
+use rustls::{ ServerConfig, ServerSessionMemoryCache, NoClientAuth };
 use tokio_rustls::ServerConfigExt;
 use webdir::Httpd;
 use utils::{
@@ -51,15 +53,15 @@ pub struct Config {
     pub addr: Option<SocketAddr>,
 
     /// root path
-    #[structopt(short="r", long="root", display_order=2)]
-    pub root: Option<String>,
+    #[structopt(short="r", long="root", display_order=2, parse(from_os_str))]
+    pub root: Option<PathBuf>,
 
     /// TLS certificate
-    #[structopt(long="cert", requires="key", display_order=3)]
-    pub cert: Option<String>,
+    #[structopt(long="cert", requires="key", display_order=3, parse(from_os_str))]
+    pub cert: Option<PathBuf>,
     /// TLS key
-    #[structopt(long="key", requires="cert", display_order=4)]
-    pub key: Option<String>,
+    #[structopt(long="key", requires="cert", display_order=4, parse(from_os_str))]
+    pub key: Option<PathBuf>,
     /// TLS session buffer size
     #[structopt(long="session-buff", requires="cert", display_order=5)]
     pub session_buff_size: Option<usize>,
@@ -73,13 +75,13 @@ pub struct Config {
     pub format: Option<Format>,
 
     /// logging output
-    #[structopt(short="o", long="log-output", display_order=8)]
-    pub log_output: Option<String>,
+    #[structopt(short="o", long="log-output", display_order=8, parse(from_os_str))]
+    pub log_output: Option<PathBuf>,
 
     /// read config from file
     #[serde(skip_serializing)]
-    #[structopt(short="c", long="config", display_order=9)]
-    pub config: Option<String>,
+    #[structopt(short="c", long="config", display_order=9, parse(from_os_str))]
+    pub config: Option<PathBuf>,
 
     /// disable keepalive
     #[serde(skip_serializing, default)]
@@ -124,9 +126,9 @@ fn make_config() -> io::Result<Config> {
         merge_config!(chunk_length);
         merge_config!(format);
         merge_config!(log_output);
-        merge_config!(root -> |p| path.with_file_name(p).to_string_lossy().into_owned());
-        merge_config!(cert -> |p| path.with_file_name(p).to_string_lossy().into_owned());
-        merge_config!(key -> |p| path.with_file_name(p).to_string_lossy().into_owned());
+        merge_config!(root -> |p| path.with_file_name(p));
+        merge_config!(cert -> |p| path.with_file_name(p));
+        merge_config!(key -> |p| path.with_file_name(p));
 
         if args_config.no_keepalive {
             args_config.keepalive = Some(false);
@@ -144,7 +146,7 @@ fn start(config: Config) -> io::Result<()> {
     let log = init_logging(&config)?;
 
     let maybe_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
-        let mut tls_config = ServerConfig::new();
+        let mut tls_config = ServerConfig::new(NoClientAuth::new());
         tls_config.set_single_cert(load_certs(cert)?, load_keys(key)?.remove(0));
         tls_config.set_persistence(ServerSessionMemoryCache::new(config.session_buff_size.unwrap_or(64)));
         Some(Arc::new(tls_config))
@@ -155,7 +157,7 @@ fn start(config: Config) -> io::Result<()> {
     let root =
         if let Some(ref p) = config.root { Arc::new(Path::new(p).canonicalize()?) }
         else { Arc::new(env::current_dir()?) };
-    let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 0));
+    let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::localhost()), 0));
     let keepalive = config.keepalive.unwrap_or(true);
     let chunk_length = config.chunk_length.unwrap_or(1 << 16);
 
@@ -182,40 +184,44 @@ fn start(config: Config) -> io::Result<()> {
         };
 
         if let Some(ref tls_config) = maybe_tls_config {
-            let handle2 = handle.clone();
-
             let done = tls_config.accept_async(stream)
-                .map(move |stream| Http::new()
+                .map_err(HyperError::Io)
+                .and_then(move |stream| Http::<Chunk>::new()
                     .keep_alive(keepalive)
-                    .bind_connection(&handle2, stream, addr, httpd)
+                    .serve_connection(stream, httpd)
                 )
-                .map_err(move |err| error!(log, "tls"; "err" => format_args!("{}", err)));
+                .map(drop)
+                .map_err(move |err| error!(log, "http/tls"; "err" => format_args!("{}", err)));
 
             handle.spawn(done);
         } else {
-            #[cfg(feature = "sendfile")] {
+            #[cfg(feature = "sendfile")]
+            let done = {
                 use futures::sync::BiLock;
                 use webdir::sendfile::BiTcpStream;
 
                 let mut httpd = httpd;
                 let (stream, stream2) = BiLock::new(stream);
-                let handle2 = handle.clone();
                 httpd.socket = Some(Arc::new(stream2));
 
-                let done = stream.lock()
+                stream.lock()
                     .map(BiTcpStream)
-                    .map(move |stream| Http::new()
+                    .and_then(move |stream| Http::<Chunk>::new()
                         .keep_alive(keepalive)
-                        .bind_connection(&handle2, stream, addr, httpd)
-                    );
-
-                handle.spawn(done);
+                        .serve_connection(stream, httpd)
+                        .map(drop)
+                        .map_err(move |err| error!(log, "http"; "err" => format_args!("{}", err)))
+                    )
             };
 
             #[cfg(not(feature = "sendfile"))]
-            Http::new()
+            let done = Http::<Chunk>::new()
                 .keep_alive(keepalive)
-                .bind_connection(&handle, stream, addr, httpd);
+                .serve_connection(stream, httpd)
+                .map(drop)
+                .map_err(move |err| error!(log, "http"; "err" => format_args!("{}", err)));
+
+            handle.spawn(done);
         }
 
         Ok(())

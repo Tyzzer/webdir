@@ -182,11 +182,11 @@ mod test {
     #[test]
     fn test_sortdir() {
         let tmp = TempDir::new("webdir_test_sortdir").unwrap();
+        fs::create_dir(tmp.path().join("test10")).unwrap();
         fs::create_dir(tmp.path().join("test")).unwrap();
         fs::create_dir(tmp.path().join("test3")).unwrap();
-        fs::create_dir(tmp.path().join("test10")).unwrap();
-        fs::File::create(tmp.path().join("test1")).unwrap();
         fs::File::create(tmp.path().join("test20")).unwrap();
+        fs::File::create(tmp.path().join("test1")).unwrap();
 
         let readdir = tmp.path().read_dir().unwrap();
         let output = SortDir::new(readdir)

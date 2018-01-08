@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{ Path, PathBuf };
 use std::fs::{ File, OpenOptions };
 use std::str::FromStr;
 use std::io::{ self, BufReader };
@@ -9,13 +9,13 @@ use super::Config;
 
 
 #[inline]
-pub fn load_certs(path: &str) -> io::Result<Vec<Certificate>> {
+pub fn load_certs(path: &Path) -> io::Result<Vec<Certificate>> {
     certs(&mut BufReader::new(File::open(path)?))
         .map_err(|_| err!(Other, "Not found cert"))
 }
 
 #[inline]
-pub fn load_keys(path: &str) -> io::Result<Vec<PrivateKey>> {
+pub fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
     rsa_private_keys(&mut BufReader::new(File::open(path)?))
         .map_err(|_| err!(Other, "Not found keys"))
 }

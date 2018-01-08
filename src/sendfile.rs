@@ -33,21 +33,21 @@ impl io::Write for BiTcpStream {
 
 impl AsyncRead for BiTcpStream {
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
-        AsyncRead::prepare_uninitialized_buffer(&self.0 as &TcpStream, buf)
+        AsyncRead::prepare_uninitialized_buffer(&self.0, buf)
     }
 
     fn read_buf<B: BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        AsyncRead::read_buf(&mut self.0 as &mut TcpStream, buf)
+        AsyncRead::read_buf(&mut self.0, buf)
     }
 }
 
 impl AsyncWrite for BiTcpStream {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
-        AsyncWrite::shutdown(&mut self.0 as &mut TcpStream)
+        AsyncWrite::shutdown(&mut self.0)
     }
 
     fn write_buf<B: Buf>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        AsyncWrite::write_buf(&mut self.0 as &mut TcpStream, buf)
+        AsyncWrite::write_buf(&mut self.0, buf)
     }
 }
 
