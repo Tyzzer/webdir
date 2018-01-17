@@ -121,20 +121,20 @@ impl Stream for SendFileFut {
 mod bsd {
     use std::ptr;
     use std::os::unix::io::RawFd;
-    use nix::libc::{ off_t, sendfile as __sendfile };
+    use nix::libc::{ off_t, sendfile as libc_sendfile };
     use nix;
 
     pub fn sendfile(out_fd: RawFd, in_fd: RawFd, offset: Option<&mut off_t>, count: usize) -> nix::Result<usize> {
         let off =
-            if let Some(ref off) = offset { **off }
+            if let Some(&mut off) = offset { off }
             else { 0 };
         let mut len = count as _;
 
         #[cfg(apple)]
-        let ret = unsafe { __sendfile(in_fd, out_fd, off, &mut len, ptr::null_mut(), 0) };
+        let ret = unsafe { libc_sendfile(in_fd, out_fd, off, &mut len, ptr::null_mut(), 0) };
 
         #[cfg(freebsdlike)]
-        let ret = unsafe { __sendfile(in_fd, out_fd, off, count, ptr::null_mut(), &mut len, 0) };
+        let ret = unsafe { libc_sendfile(in_fd, out_fd, off, count, ptr::null_mut(), &mut len, 0) };
 
         if let Some(offset) = offset {
             *offset += len;

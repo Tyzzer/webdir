@@ -1,6 +1,6 @@
 #![feature(proc_macro)]
 
-#[macro_use] extern crate error_chain;
+#[macro_use] extern crate failure;
 #[macro_use] extern crate slog;
 #[cfg(feature = "sendfile")] extern crate nix;
 #[cfg(feature = "sendfile")] extern crate mio;
