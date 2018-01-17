@@ -6,7 +6,8 @@ use std::os::unix::io::AsRawFd;
 use futures::{ Poll, Stream, Async };
 use futures::sync::{ BiLock, BiLockAcquired };
 use tokio_io::{ AsyncRead, AsyncWrite };
-use tokio_core::net::TcpStream;
+use tokio::net::TcpStream;
+use tokio::reactor::Handle;
 use nix;
 use nix::libc::off_t;
 use self::bytes::buf::{ Buf, BufMut };
@@ -33,21 +34,21 @@ impl io::Write for BiTcpStream {
 
 impl AsyncRead for BiTcpStream {
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
-        AsyncRead::prepare_uninitialized_buffer(&self.0, buf)
+        AsyncRead::prepare_uninitialized_buffer(&*self.0, buf)
     }
 
     fn read_buf<B: BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        AsyncRead::read_buf(&mut self.0, buf)
+        AsyncRead::read_buf(&mut *self.0, buf)
     }
 }
 
 impl AsyncWrite for BiTcpStream {
     fn shutdown(&mut self) -> Poll<(), io::Error> {
-        AsyncWrite::shutdown(&mut self.0)
+        AsyncWrite::shutdown(&mut *self.0)
     }
 
     fn write_buf<B: Buf>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        AsyncWrite::write_buf(&mut self.0, buf)
+        AsyncWrite::write_buf(&mut *self.0, buf)
     }
 }
 
@@ -93,6 +94,7 @@ impl Stream for SendFileFut {
                 // TODO https://github.com/tokio-rs/tokio-core/issues/196
                 // socket.need_write();
 
+                Handle::default().wakeup();
                 Ok(Async::NotReady)
             },
             Err(err) => Err(err.into())

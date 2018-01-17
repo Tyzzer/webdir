@@ -3,6 +3,7 @@
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate slog;
 #[cfg(feature = "sendfile")] extern crate nix;
+#[cfg(feature = "sendfile")] extern crate tokio;
 extern crate futures;
 extern crate futures_cpupool;
 extern crate tokio_io;
@@ -34,7 +35,7 @@ use hyper::server::{ Service, Request, Response };
 use slog::Logger;
 use process::Process;
 
-#[cfg(feature = "sendfile")] use tokio_core::net::TcpStream;
+#[cfg(feature = "sendfile")] use tokio::net::TcpStream;
 #[cfg(feature = "sendfile")] use futures::sync::BiLock;
 
 

@@ -5,7 +5,7 @@ use tokio_io::io::Window;
 use hyper;
 use ::error;
 
-#[cfg(feature = "sendfile")] use tokio_core::net::TcpStream;
+#[cfg(feature = "sendfile")] use tokio::net::TcpStream;
 #[cfg(feature = "sendfile")] use std::sync::Arc;
 #[cfg(feature = "sendfile")] use futures::sync::BiLock;
 #[cfg(feature = "sendfile")] use ::sendfile::SendFileFut;
