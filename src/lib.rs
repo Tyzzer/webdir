@@ -4,8 +4,8 @@
 #[macro_use] extern crate slog;
 #[cfg(feature = "sendfile")] extern crate nix;
 extern crate futures;
+extern crate futures_cpupool;
 extern crate tokio_io;
-extern crate tokio_core;
 extern crate hyper;
 extern crate maud;
 extern crate percent_encoding;
@@ -28,7 +28,7 @@ use std::io;
 use std::sync::Arc;
 use std::path::PathBuf;
 use futures::future::{ self, FutureResult };
-use tokio_core::reactor::Remote;
+use futures_cpupool::CpuPool;
 use hyper::{ header, Get, Head, StatusCode };
 use hyper::server::{ Service, Request, Response };
 use slog::Logger;
@@ -39,7 +39,7 @@ use process::Process;
 
 
 pub struct Httpd {
-    pub remote: Remote,
+    pub remote: CpuPool,
     pub root: Arc<PathBuf>,
     pub log: Logger,
     pub chunk_length: usize,

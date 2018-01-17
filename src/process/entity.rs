@@ -3,7 +3,6 @@ use std::ops::Range;
 use std::hash::Hasher;
 use std::path::Path;
 use std::fs::Metadata;
-use tokio_core::reactor::Handle;
 use hyper::{ header, Headers, Response, StatusCode };
 use hyper::header::ByteRangeSpec;
 use slog::Logger;
@@ -69,9 +68,9 @@ impl<'a, 'b> Entity<'a, 'b> {
     }
 
     #[inline]
-    pub fn open(&self, handle: Handle) -> io::Result<file::File> {
+    pub fn open(&self) -> io::Result<file::File> {
         let fd = fs::File::open(&*self.path)?;
-        file::File::new(fd, handle, self.chunk_len, self.len)
+        file::File::new(fd, self.chunk_len, self.len)
     }
 
     pub fn headers(self, is_multipart: bool) -> Headers {

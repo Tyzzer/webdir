@@ -6,6 +6,7 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
 use futures::{ stream, Stream, Future };
+use futures::future::Executor;
 use hyper::{ header, Request, Response, Head, Body, StatusCode };
 use mime_guess::guess_mime_type;
 use maud::Render;
@@ -77,7 +78,7 @@ impl<'a> Process<'a> {
                 .map(drop)
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-            self.httpd.remote.spawn(move |_| done);
+            self.httpd.remote.execute(done).unwrap();
         }
 
         // TODO https://github.com/hyperium/mime/issues/52
@@ -91,9 +92,7 @@ impl<'a> Process<'a> {
         match entity.check(self.req.headers()) {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
             EntifyResult::None => {
-                let handle = self.httpd.remote.handle()
-                    .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
-                let fd = entity.open(handle)?;
+                let fd = entity.open()?;
                 self.send(&fd, None)
                     .map(|res| res
                         .with_headers(entity.headers(false))
@@ -103,9 +102,7 @@ impl<'a> Process<'a> {
             EntifyResult::One(range) => {
                 debug!(self.log, "process"; "range" => format_args!("{:?}", range));
 
-                let handle = self.httpd.remote.handle()
-                    .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
-                let fd = entity.open(handle)?;
+                let fd = entity.open()?;
                 self.send(&fd, Some(range.clone()))
                     .map(|res| res
                          .with_status(StatusCode::PartialContent)
@@ -121,8 +118,6 @@ impl<'a> Process<'a> {
 
                 debug!(self.log, "process"; "ranges" => format_args!("{:?}", ranges));
 
-                let handle = self.httpd.remote.handle()
-                    .ok_or_else(|| err!(Other, "Remote get handle fail"))?;
                 let mut res = Response::new();
 
                 if self.req.method() == &Head {
@@ -134,7 +129,7 @@ impl<'a> Process<'a> {
                 }
 
                 let log = self.log.clone();
-                let fd = entity.open(handle)?;
+                let fd = entity.open()?;
                 let (send, body) = Body::pair();
                 res.set_body(body);
 
@@ -163,7 +158,7 @@ impl<'a> Process<'a> {
                     .map(drop)
                     .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-                self.httpd.remote.spawn(move |_| done);
+                self.httpd.remote.execute(done).unwrap();
 
                 Ok(res
                     .with_status(StatusCode::PartialContent)
@@ -193,7 +188,7 @@ impl<'a> Process<'a> {
                 .map(drop)
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-            self.httpd.remote.spawn(move |_| done);
+            self.httpd.remote.execute(done).unwrap();
         }
 
         Ok(res)
@@ -217,7 +212,7 @@ impl<'a> Process<'a> {
                 .for_each(|_| future::ok(()))
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-            self.httpd.remote.spawn(move |_| done);
+            self.httpd.remote.execute(done).unwrap();
         } else {
             let range = range.unwrap_or_else(|| 0..fd.len);
 
@@ -232,7 +227,7 @@ impl<'a> Process<'a> {
                 .map(drop)
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-            self.httpd.remote.spawn(move |_| done);
+            self.httpd.remote.execute(done).unwrap();
         }
 
         Ok(res)

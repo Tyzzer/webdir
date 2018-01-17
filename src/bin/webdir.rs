@@ -11,8 +11,9 @@ extern crate structopt;
 #[macro_use] extern crate serde_derive;
 extern crate toml;
 extern crate futures;
+extern crate futures_cpupool;
+extern crate tokio;
 extern crate hyper;
-extern crate tokio_core;
 extern crate rustls;
 extern crate tokio_rustls;
 #[macro_use] extern crate webdir;
@@ -27,11 +28,12 @@ use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
 use std::path::{ Path, PathBuf };
 use structopt::StructOpt;
 use futures::{ Future, Stream };
+use futures::future::Executor;
+use futures_cpupool::CpuPool;
 use hyper::Chunk;
 use hyper::server::Http;
 use hyper::error::Error as HyperError;
-use tokio_core::reactor::Core;
-use tokio_core::net::TcpListener;
+use tokio::net::TcpListener;
 use rustls::{ ServerConfig, ServerSessionMemoryCache, NoClientAuth };
 use tokio_rustls::ServerConfigExt;
 use webdir::Httpd;
@@ -161,10 +163,8 @@ fn start(config: Config) -> io::Result<()> {
     let keepalive = config.keepalive.unwrap_or(true);
     let chunk_length = config.chunk_length.unwrap_or(1 << 16);
 
-    let mut core = Core::new()?;
-    let handle = core.handle();
-    let remote = handle.remote().clone();
-    let listener = TcpListener::bind(&addr, &handle)?;
+    let pool = CpuPool::new_num_cpus();
+    let listener = TcpListener::bind(&addr)?;
 
     info!(log, "listening";
         "root" => format_args!("{}", root.display()),
@@ -176,7 +176,7 @@ fn start(config: Config) -> io::Result<()> {
     let done = listener.incoming().for_each(|(stream, addr)| {
         let log = log.new(o!("addr" => format!("{}", addr)));
         let httpd = Httpd {
-            remote: remote.clone(),
+            remote: pool.clone(),
             root: Arc::clone(&root),
             log: log.clone(),
             chunk_length: chunk_length,
@@ -193,7 +193,7 @@ fn start(config: Config) -> io::Result<()> {
                 .map(drop)
                 .map_err(move |err| error!(log, "http/tls"; "err" => format_args!("{}", err)));
 
-            handle.spawn(done);
+            pool.execute(done).unwrap();
         } else {
             #[cfg(feature = "sendfile")]
             let done = {
@@ -221,13 +221,13 @@ fn start(config: Config) -> io::Result<()> {
                 .map(drop)
                 .map_err(move |err| error!(log, "http"; "err" => format_args!("{}", err)));
 
-            handle.spawn(done);
+            pool.execute(done).unwrap();
         }
 
         Ok(())
     });
 
-    core.run(done)
+    done.wait()
 }
 
 fn main() {

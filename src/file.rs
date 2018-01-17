@@ -2,7 +2,6 @@ use std::{ io, fs, cmp };
 use std::ops::Range;
 use futures::{ Stream, Poll, Async };
 use tokio_io::io::Window;
-use tokio_core::reactor::Handle;
 use hyper;
 use ::error;
 
@@ -20,7 +19,7 @@ pub struct File {
 
 impl File {
     #[inline]
-    pub fn new(fd: fs::File, _handle: Handle, chunk_len: usize, len: u64) -> io::Result<Self> {
+    pub fn new(fd: fs::File, chunk_len: usize, len: u64) -> io::Result<Self> {
         Ok(File { fd, chunk_len, len })
     }
 
@@ -86,8 +85,7 @@ mod test {
 
     use std::fs;
     use std::io::Write;
-    use futures::Stream;
-    use tokio_core::reactor::Core;
+    use futures::{ Future, Stream };
     use self::tempdir::TempDir;
     use super::*;
 
@@ -100,17 +98,15 @@ mod test {
                 .write_all(&[42; 1024]).unwrap();
         }
 
-        let mut core = Core::new().unwrap();
-        let handle = core.handle();
         let fd = fs::File::open(tmp.path().join("test")).unwrap();
         let len = fd.metadata().unwrap().len();
 
-        let fd = File::new(fd, handle, len as _, 1 << 16).unwrap();
+        let fd = File::new(fd, len as _, 1 << 16).unwrap();
         let fut = fd.read(32..1021).unwrap()
             .map(|chunk| chunk.unwrap().to_vec())
             .concat2();
 
-        let output = core.run(fut).unwrap();
+        let output = fut.wait().unwrap();
 
         assert_eq!(output, &[42; 989][..]);
     }

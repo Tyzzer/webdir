@@ -31,8 +31,9 @@ error-chain = "0.11.0"
 
 bytes = "0.4"
 futures = "0.1"
+futures-cpupool = "*"
+tokio = { git = "https://github.com/tokio-rs/tokio", branch = "new-crate" }
 tokio-io = "0.1"
-tokio-core = "0.1"
 hyper = "0.11"
 
 rustls = "0.12"
@@ -57,6 +58,3 @@ nix = { version = "0.9", optional = true }
 
 [dev-dependencies]
 tempdir = "0.3"
-
-[profile.release]
-lto = true
