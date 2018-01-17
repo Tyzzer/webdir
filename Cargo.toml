@@ -15,7 +15,7 @@ path = "src/bin/webdir.rs"
 doc = false
 
 [features]
-sendfile = [ "nix" ]
+sendfile = [ "nix", "mio" ]
 sysalloc = []
 
 [target.'cfg(unix)'.dependencies]
@@ -31,7 +31,8 @@ error-chain = "0.11.0"
 
 bytes = "0.4"
 futures = "0.1"
-futures-cpupool = "*"
+futures-cpupool = "0.1"
+mio = { version = "0.6", optional = true }
 tokio = { git = "https://github.com/tokio-rs/tokio", branch = "new-crate" }
 tokio-io = "0.1"
 hyper = "0.11"

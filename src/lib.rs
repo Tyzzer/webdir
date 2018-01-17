@@ -3,6 +3,7 @@
 #[macro_use] extern crate error_chain;
 #[macro_use] extern crate slog;
 #[cfg(feature = "sendfile")] extern crate nix;
+#[cfg(feature = "sendfile")] extern crate mio;
 #[cfg(feature = "sendfile")] extern crate tokio;
 extern crate futures;
 extern crate futures_cpupool;

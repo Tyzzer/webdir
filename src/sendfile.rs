@@ -1,13 +1,14 @@
 extern crate bytes;
 
-use std::{ io, fs };
+use std::{ io, fs, mem };
 use std::sync::Arc;
 use std::os::unix::io::AsRawFd;
 use futures::{ Poll, Stream, Async };
 use futures::sync::{ BiLock, BiLockAcquired };
-use tokio_io::{ AsyncRead, AsyncWrite };
+use mio::net::TcpStream as MioTcpStream;
 use tokio::net::TcpStream;
-use tokio::reactor::Handle;
+use tokio::reactor::PollEvented;
+use tokio_io::{ AsyncRead, AsyncWrite };
 use nix;
 use nix::libc::off_t;
 use self::bytes::buf::{ Buf, BufMut };
@@ -71,6 +72,17 @@ impl Stream for SendFileFut {
         #[cfg(any(apple, freebsdlike))]
         use self::bsd::sendfile;
 
+        struct PubTcpStream {
+            pub io: PollEvented<MioTcpStream>
+        }
+
+        unsafe fn with_pub_tcpstream<F>(t: &TcpStream, f: F)
+            -> io::Result<()>
+            where F: FnOnce(&PubTcpStream) -> io::Result<()>
+        {
+            f(mem::transmute(t))
+        }
+
 
         let count = match self.end.checked_sub(self.offset as usize) {
             Some(0) | None => return Ok(Async::Ready(None)),
@@ -94,7 +106,9 @@ impl Stream for SendFileFut {
                 // TODO https://github.com/tokio-rs/tokio-core/issues/196
                 // socket.need_write();
 
-                Handle::default().wakeup();
+                unsafe {
+                    with_pub_tcpstream(&socket, |socket| socket.io.need_write())?;
+                }
                 Ok(Async::NotReady)
             },
             Err(err) => Err(err.into())
