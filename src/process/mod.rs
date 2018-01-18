@@ -148,12 +148,11 @@ impl<'a> Process<'a> {
 
                         fd.try_clone()?
                             .read(range)
-                            .map(|fut| {
-                                stream::once(Ok(chunk!(BOUNDARY_LINE)))
-                                    .chain(stream::once(Ok(chunk!(format!("{}\r\n", headers)))))
-                                    .chain(fut)
-                                    .chain(stream::once(Ok(chunk!("\r\n"))))
-                            })
+                            .map(|fut| stream::once(Ok(chunk!(BOUNDARY_LINE)))
+                                .chain(stream::once(Ok(chunk!(format!("{}\r\n", headers)))))
+                                .chain(fut)
+                                .chain(stream::once(Ok(chunk!("\r\n"))))
+                            )
                             .map_err(Into::into)
                     })
                     .flatten()
@@ -200,12 +199,14 @@ impl<'a> Process<'a> {
     #[cfg(feature = "sendfile")]
     fn send(&self, fd: file::File, range: Option<Range<u64>>) -> io::Result<Response> {
         use futures::future;
+
         let mut res = Response::new();
+        let range = range.unwrap_or_else(|| 0..fd.length);
+        let (hint, _) = range.size_hint();
 
         if self.req.method() == &Head {
             res.set_body(Body::empty());
-        } else if let (&Some(ref socket), true) = (&self.httpd.socket, self.httpd.chunk_length >= fd.length as _) {
-            let range = range.unwrap_or_else(|| 0..fd.length);
+        } else if let (&Some(ref socket), true) = (&self.httpd.socket, self.httpd.chunk_length >= hint) {
             let log = self.log.clone();
             res.set_body(Body::empty());
 
@@ -217,8 +218,6 @@ impl<'a> Process<'a> {
 
             self.httpd.remote.execute(done).unwrap();
         } else {
-            let range = range.unwrap_or_else(|| 0..fd.length);
-
             let log = self.log.clone();
             let (send, body) = Body::pair();
             res.set_body(body);
