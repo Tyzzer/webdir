@@ -93,23 +93,25 @@ impl<'a> Process<'a> {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
             EntifyResult::None => {
                 let fd = entity.open()?;
-                self.send(&fd, None)
+                let length = fd.length;
+                self.send(fd, None)
                     .map(|res| res
                         .with_headers(entity.headers(false))
-                        .with_header(header::ContentLength(fd.len))
+                        .with_header(header::ContentLength(length))
                     )
             },
             EntifyResult::One(range) => {
                 debug!(self.log, "process"; "range" => format_args!("{:?}", range));
 
                 let fd = entity.open()?;
-                self.send(&fd, Some(range.clone()))
+                let length = fd.length;
+                self.send(fd, Some(range.clone()))
                     .map(|res| res
                          .with_status(StatusCode::PartialContent)
                          .with_headers(entity.headers(false))
                          .with_header(header::ContentLength(range.end - range.start))
                          .with_header(header::ContentRange(header::ContentRangeSpec::Bytes {
-                            range: Some((range.start, range.end - 1)), instance_length: Some(fd.len)
+                            range: Some((range.start, range.end - 1)), instance_length: Some(length)
                         }))
                     )
             },
@@ -129,23 +131,24 @@ impl<'a> Process<'a> {
                 }
 
                 let log = self.log.clone();
-                let fd = entity.open()?;
                 let (send, body) = Body::pair();
                 res.set_body(body);
 
-                let content_type = header::ContentType(guess_mime_type(&self.path));
+                let fd = entity.open()?;
+                let mime_type = guess_mime_type(&self.path);
 
                 let done = stream::iter_ok::<_, error::Error>(ranges.into_iter())
                     .and_then(move |range| {
-                        let len = range.end - range.start;
+                        let length = range.end - range.start;
                         let mut headers = header::Headers::new();
-                        headers.set(content_type.clone());
+                        headers.set(header::ContentType(mime_type.clone()));
                         headers.set(header::ContentRange(header::ContentRangeSpec::Bytes {
-                            range: Some((range.start, range.end - 1)), instance_length: Some(len)
+                            range: Some((range.start, range.end - 1)), instance_length: Some(length)
                         }));
 
-                        fd.read(range)
-                            .map(move |fut| {
+                        fd.try_clone()?
+                            .read(range)
+                            .map(|fut| {
                                 stream::once(Ok(chunk!(BOUNDARY_LINE)))
                                     .chain(stream::once(Ok(chunk!(format!("{}\r\n", headers)))))
                                     .chain(fut)
@@ -169,13 +172,13 @@ impl<'a> Process<'a> {
     }
 
     #[cfg(not(feature = "sendfile"))]
-    fn send(&self, fd: &file::File, range: Option<Range<u64>>) -> io::Result<Response> {
+    fn send(&self, fd: file::File, range: Option<Range<u64>>) -> io::Result<Response> {
         let mut res = Response::new();
 
         if self.req.method() == &Head {
             res.set_body(Body::empty());
         } else {
-            let range = range.unwrap_or_else(|| 0..fd.len);
+            let range = range.unwrap_or_else(|| 0..fd.length);
 
             let log = self.log.clone();
             let (send, body) = Body::pair();
@@ -195,14 +198,14 @@ impl<'a> Process<'a> {
     }
 
     #[cfg(feature = "sendfile")]
-    fn send(&self, fd: &file::File, range: Option<Range<u64>>) -> io::Result<Response> {
+    fn send(&self, fd: file::File, range: Option<Range<u64>>) -> io::Result<Response> {
         use futures::future;
         let mut res = Response::new();
 
         if self.req.method() == &Head {
             res.set_body(Body::empty());
-        } else if let (&Some(ref socket), true) = (&self.httpd.socket, self.httpd.chunk_length >= fd.len as _) {
-            let range = range.unwrap_or_else(|| 0..fd.len);
+        } else if let (&Some(ref socket), true) = (&self.httpd.socket, self.httpd.chunk_length >= fd.length as _) {
+            let range = range.unwrap_or_else(|| 0..fd.length);
             let log = self.log.clone();
             res.set_body(Body::empty());
 
@@ -214,7 +217,7 @@ impl<'a> Process<'a> {
 
             self.httpd.remote.execute(done).unwrap();
         } else {
-            let range = range.unwrap_or_else(|| 0..fd.len);
+            let range = range.unwrap_or_else(|| 0..fd.length);
 
             let log = self.log.clone();
             let (send, body) = Body::pair();

@@ -13,28 +13,36 @@ use ::error;
 
 pub struct File {
     fd: fs::File,
-    chunk_len: usize,
-    pub len: u64
+    chunk_length: usize,
+    pub length: u64
 }
 
 impl File {
     #[inline]
-    pub fn new(fd: fs::File, chunk_len: usize, len: u64) -> io::Result<Self> {
-        Ok(File { fd, chunk_len, len })
+    pub fn new(fd: fs::File, chunk_length: usize, length: u64) -> io::Result<Self> {
+        Ok(File { fd, chunk_length, length })
     }
 
-    pub fn read(&self, range: Range<u64>) -> io::Result<ReadChunkFut> {
-        let fd = self.fd.try_clone()?;
-        let buf = vec![0; cmp::min(self.chunk_len, self.len as _)];
+    #[inline]
+    pub fn try_clone(&self) -> io::Result<Self> {
+        Ok(File {
+            fd: self.fd.try_clone()?,
+            chunk_length: self.chunk_length,
+            length: self.length
+        })
+    }
 
-        Ok(ReadChunkFut { fd, range, buf })
+    pub fn read(self, range: Range<u64>) -> io::Result<ReadChunkFut> {
+        let buf = vec![0; cmp::min(self.chunk_length, self.length as _)];
+        Ok(ReadChunkFut { fd: self.fd, range, buf })
     }
 
     #[cfg(feature = "sendfile")]
-    pub fn sendfile(&self, range: Range<u64>, socket: Arc<BiLock<TcpStream>>) -> io::Result<SendFileFut> {
-        let fd = self.fd.try_clone()?;
+    #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
+    pub fn sendfile(self, range: Range<u64>, socket: Arc<BiLock<TcpStream>>) -> io::Result<SendFileFut> {
         Ok(SendFileFut {
-            socket, fd,
+            socket,
+            fd: self.fd,
             offset: range.start as _,
             end: range.end as _
         })

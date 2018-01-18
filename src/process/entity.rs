@@ -19,8 +19,8 @@ pub struct Entity<'a, 'b> {
     metadata: &'a Metadata,
     log: &'a Logger,
     path: &'b Path,
-    chunk_len: usize,
-    len: u64,
+    chunk_length: usize,
+    length: u64,
     etag: header::EntityTag
 }
 
@@ -32,9 +32,9 @@ pub enum EntifyResult {
 }
 
 impl<'a, 'b> Entity<'a, 'b> {
-    pub fn new(path: &'b Path, metadata: &'a Metadata, log: &'a Logger, chunk_len: usize) -> Self {
-        let len = metadata.len();
-        Entity { path, metadata, log, chunk_len, len, etag: Self::etag(metadata) }
+    pub fn new(path: &'b Path, metadata: &'a Metadata, log: &'a Logger, chunk_length: usize) -> Self {
+        let length = metadata.len();
+        Entity { path, metadata, log, chunk_length, length, etag: Self::etag(metadata) }
     }
 
     #[cfg(unix)]
@@ -70,7 +70,7 @@ impl<'a, 'b> Entity<'a, 'b> {
     #[inline]
     pub fn open(&self) -> io::Result<file::File> {
         let fd = fs::File::open(&*self.path)?;
-        file::File::new(fd, self.chunk_len, self.len)
+        file::File::new(fd, self.chunk_length, self.length)
     }
 
     pub fn headers(self, is_multipart: bool) -> Headers {
@@ -119,7 +119,7 @@ impl<'a, 'b> Entity<'a, 'b> {
         }
 
         if let Some(&header::Range::Bytes(ref ranges)) = headers.get::<header::Range>() {
-            let length = self.len;
+            let length = self.length;
             let mut vec = SmallVec::<[_; 1]>::new();
 
             for range in ranges {

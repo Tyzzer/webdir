@@ -76,11 +76,8 @@ impl Stream for SendFileFut {
             pub io: PollEvented<MioTcpStream>
         }
 
-        unsafe fn with_pub_tcpstream<F>(t: &TcpStream, f: F)
-            -> io::Result<()>
-            where F: FnOnce(&PubTcpStream) -> io::Result<()>
-        {
-            f(mem::transmute(t))
+        unsafe fn as_pub_tcpstream(t: &TcpStream) -> &PubTcpStream {
+            mem::transmute(t)
         }
 
 
@@ -107,7 +104,7 @@ impl Stream for SendFileFut {
                 // socket.need_write();
 
                 unsafe {
-                    with_pub_tcpstream(&socket, |socket| socket.io.need_write())?;
+                    as_pub_tcpstream(&socket).io.need_write()?;
                 }
                 Ok(Async::NotReady)
             },
