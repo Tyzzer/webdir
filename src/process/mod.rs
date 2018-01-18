@@ -54,7 +54,7 @@ impl<'a> Process<'a> {
                 padding-left: 2em;\
             }\
         </style></head><body><table><tbody>";
-        const HTML_FOOTER: &str = "</tbody></table</body></html>";
+        const HTML_FOOTER: &str = "</tbody></table></body></html>";
 
         let mut res = Response::new();
 
