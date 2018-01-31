@@ -173,8 +173,8 @@ fn start(config: Config) -> io::Result<()> {
         "tls" => maybe_tls_config.is_some()
     );
 
-    let done = listener.incoming().for_each(|(stream, addr)| {
-        let log = log.new(o!("addr" => format!("{}", addr)));
+    let done = listener.incoming().for_each(|stream| {
+        let log = log.new(o!("addr" => format!("{:?}", stream.peer_addr())));
         let httpd = Httpd {
             remote: pool.clone(),
             root: Arc::clone(&root),

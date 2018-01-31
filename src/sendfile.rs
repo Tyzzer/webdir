@@ -9,7 +9,7 @@ use mio::net::TcpStream as MioTcpStream;
 use tokio::net::TcpStream;
 use tokio::reactor::PollEvented;
 use tokio_io::{ AsyncRead, AsyncWrite };
-use nix;
+use nix::{ self, errno };
 use nix::libc::off_t;
 use self::bytes::buf::{ Buf, BufMut };
 use ::error;
@@ -99,7 +99,7 @@ impl Stream for SendFileFut {
             Ok(len) => {
                 Ok(Async::Ready(Some(len)))
             },
-            Err(ref err) if &nix::Error::Sys(nix::Errno::EAGAIN) == err => {
+            Err(ref err) if &nix::Error::Sys(errno::Errno::EAGAIN) == err => {
                 // TODO https://github.com/tokio-rs/tokio-core/issues/196
                 // socket.need_write();
 
