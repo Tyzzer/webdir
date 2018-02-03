@@ -72,12 +72,12 @@ impl Stream for SendFileFut {
         #[cfg(any(apple, freebsdlike))]
         use self::bsd::sendfile;
 
-        struct PubTcpStream {
-            pub io: PollEvented<MioTcpStream>
-        }
+        unsafe fn as_poll_evented(t: &mut TcpStream) -> &mut PollEvented<MioTcpStream> {
+            struct PubTcpStream {
+                pub io: PollEvented<MioTcpStream>
+            }
 
-        unsafe fn as_pub_tcpstream(t: &TcpStream) -> &PubTcpStream {
-            mem::transmute(t)
+            &mut mem::transmute::<_, &mut PubTcpStream>(t).io
         }
 
 
@@ -86,16 +86,18 @@ impl Stream for SendFileFut {
             Some(count) => count
         };
 
-        let socket = match self.socket.poll_lock() {
+        let mut socket = match self.socket.poll_lock() {
             Async::Ready(socket) => socket,
             Async::NotReady => return Ok(Async::NotReady)
         };
+
+        let socket = unsafe { as_poll_evented(&mut socket) };
 
         if let Async::NotReady = socket.poll_write() {
             return Ok(Async::NotReady)
         }
 
-        match sendfile(socket.as_raw_fd(), self.fd.as_raw_fd(), Some(&mut self.offset), count) {
+        match sendfile(socket.get_ref().as_raw_fd(), self.fd.as_raw_fd(), Some(&mut self.offset), count) {
             Ok(len) => {
                 Ok(Async::Ready(Some(len)))
             },
@@ -103,9 +105,7 @@ impl Stream for SendFileFut {
                 // TODO https://github.com/tokio-rs/tokio-core/issues/196
                 // socket.need_write();
 
-                unsafe {
-                    as_pub_tcpstream(&socket).io.need_write()?;
-                }
+                socket.need_write()?;
                 Ok(Async::NotReady)
             },
             Err(err) => Err(err.into())

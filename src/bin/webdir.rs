@@ -28,7 +28,7 @@ use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
 use std::path::{ Path, PathBuf };
 use structopt::StructOpt;
 use futures::{ Future, Stream };
-use futures::future::Executor;
+use futures::future::{ self, Executor };
 use futures_cpupool::CpuPool;
 use hyper::Chunk;
 use hyper::server::Http;
@@ -227,7 +227,7 @@ fn start(config: Config) -> io::Result<()> {
         Ok(())
     });
 
-    done.wait()
+    future::blocking(done).wait()
 }
 
 fn main() {
