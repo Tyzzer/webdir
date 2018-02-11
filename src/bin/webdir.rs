@@ -73,7 +73,7 @@ pub struct Config {
     pub session_buff_size: Option<usize>,
 
     /// chunk length
-    #[structopt(long="chunk-length", value_name="length")]
+    #[structopt(long="chunk-length", value_name="length", conflicts_with="use_sendfile")]
     pub chunk_length: Option<usize>,
 
     /// logging format
@@ -105,6 +105,16 @@ pub struct Config {
 
     #[structopt(hidden=true)]
     pub keepalive: Option<bool>,
+
+    /// use sendfile
+    #[cfg(feature = "sendfile")]
+    #[serde(skip_serializing, default)]
+    #[structopt(long="use-sendfile")]
+    pub use_sendfile: bool,
+
+    #[cfg(feature = "sendfile")]
+    #[structopt(hidden=true)]
+    pub sendfile: Option<bool>,
 }
 
 
@@ -147,10 +157,14 @@ fn make_config() -> io::Result<Config> {
         #[cfg(feature = "tls")] merge_config!(cert -> |p| path.with_file_name(p));
         #[cfg(feature = "tls")] merge_config!(key -> |p| path.with_file_name(p));
 
-        if args_config.no_keepalive {
-            args_config.keepalive = Some(false);
-        } else {
-            args_config.keepalive = config.keepalive;
+        args_config.keepalive =
+            if args_config.no_keepalive { Some(false) }
+            else { config.keepalive };
+
+        #[cfg(feature = "sendfile")] {
+            args_config.sendfile =
+                if args_config.use_sendfile { Some(true) }
+                else { config.sendfile };
         }
     }
 
@@ -158,22 +172,22 @@ fn make_config() -> io::Result<Config> {
 }
 
 
+#[cfg_attr(not(feature = "tls"), allow(unused_variables, unused_mut))]
 #[inline]
-fn start(config: Config) -> io::Result<()> {
+fn start(mut config: Config) -> io::Result<()> {
     let log = init_logging(&config)?;
 
     #[cfg(feature = "tls")]
-    let maybe_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
+    let maybe_tls_config = if let (Some(cert), Some(key)) = (config.cert.take(), config.key.take()) {
         let mut tls_config = ServerConfig::new(NoClientAuth::new());
-        tls_config.set_single_cert(load_certs(cert)?, load_keys(key)?.remove(0));
+        tls_config.set_single_cert(load_certs(&cert)?, load_keys(&key)?.remove(0));
         tls_config.set_persistence(ServerSessionMemoryCache::new(config.session_buff_size.unwrap_or(64)));
         Some(Arc::new(tls_config))
     } else {
         None
     };
 
-    #[cfg(not(feature = "tls"))]
-    let maybe_tls_config: Option<()> = None;
+    #[cfg(not(feature = "tls"))] let maybe_tls_config: Option<()> = None;
 
     let root =
         if let Some(ref p) = config.root { Arc::new(Path::new(p).canonicalize()?) }
@@ -181,6 +195,9 @@ fn start(config: Config) -> io::Result<()> {
     let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::localhost()), 0));
     let keepalive = config.keepalive.unwrap_or(true);
     let chunk_length = config.chunk_length.unwrap_or(1 << 16);
+    #[cfg(feature = "sendfile")] let sendfile_flag = config.sendfile.unwrap_or(false);
+
+    drop(config);
 
     let pool = CpuPool::new_num_cpus();
     let listener = TcpListener::bind(&addr)?;
@@ -192,7 +209,6 @@ fn start(config: Config) -> io::Result<()> {
         "tls" => maybe_tls_config.is_some()
     );
 
-    #[cfg_attr(not(feature = "tls"), allow(unused_variables))]
     let done = listener.incoming().for_each(|stream| {
         let log = log.new(o!("addr" => format!("{:?}", stream.peer_addr())));
         let httpd = Httpd {
@@ -201,6 +217,7 @@ fn start(config: Config) -> io::Result<()> {
             log: log.clone(),
             chunk_length: chunk_length,
             #[cfg(feature = "sendfile")] socket: None,
+            #[cfg(feature = "sendfile")] use_sendfile: sendfile_flag
         };
 
         if let Some(ref tls_config) = maybe_tls_config {

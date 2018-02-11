@@ -65,7 +65,7 @@ impl<'a> Process<'a> {
             let (send, body) = Body::pair();
             res.set_body(body);
 
-            debug!(self.log, "process"; "method" => "senddir");
+            debug!(self.log, "process"; "send" => "senddir");
 
             let done = stream::once::<_, error::Error>(Ok(chunk!(HTML_HEADER)))
                 .chain(stream::once(Ok(chunk!(into up(self.is_root)))))
@@ -183,7 +183,7 @@ impl<'a> Process<'a> {
             let (send, body) = Body::pair();
             res.set_body(body);
 
-            debug!(self.log, "process"; "method" => "readchunk");
+            debug!(self.log, "process"; "send" => "readchunk");
 
             let done = fd.read(range)?
                 .forward(send)
@@ -202,15 +202,14 @@ impl<'a> Process<'a> {
 
         let mut res = Response::new();
         let range = range.unwrap_or_else(|| 0..fd.length);
-        let (hint, _) = range.size_hint();
 
         if self.req.method() == &Head {
             res.set_body(Body::empty());
-        } else if let (&Some(ref socket), true) = (&self.httpd.socket, self.httpd.chunk_length >= hint) {
+        } else if let (&Some(ref socket), true) = (&self.httpd.socket, self.httpd.use_sendfile) {
             let log = self.log.clone();
             res.set_body(Body::empty());
 
-            debug!(self.log, "process"; "method" => "sendfile");
+            debug!(self.log, "process"; "send" => "sendfile");
 
             let done = fd.sendfile(range, socket.clone())?
                 .for_each(|_| future::ok(()))
@@ -222,7 +221,7 @@ impl<'a> Process<'a> {
             let (send, body) = Body::pair();
             res.set_body(body);
 
-            debug!(self.log, "process"; "method" => "readchunk");
+            debug!(self.log, "process"; "send" => "readchunk");
 
             let done = fd.read(range)?
                 .forward(send)

@@ -48,6 +48,9 @@ pub struct Httpd {
 
     #[cfg(feature = "sendfile")]
     pub socket: Option<Arc<BiLock<TcpStream>>>,
+
+    #[cfg(feature = "sendfile")]
+    pub use_sendfile: bool
 }
 
 impl Service for Httpd {
