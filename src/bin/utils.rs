@@ -4,7 +4,7 @@ use std::str::FromStr;
 use std::io::{ self, BufReader };
 use rustls::{ Certificate, PrivateKey };
 use rustls::internal::pemfile::{ certs, rsa_private_keys };
-use slog::Logger;
+use slog::{ Level, LevelFilter, Logger };
 use super::Config;
 
 
@@ -103,22 +103,25 @@ pub fn init_logging(config: &Config) -> io::Result<Logger> {
             }
         };
         ( format $config:expr, $decorator:expr ) => {
-            match $config.format.unwrap_or_default() {
+            match $config.log_format.unwrap_or_default() {
                 Format::Compact => drain!(compact $decorator),
                 Format::Full => drain!(full $decorator)
             }
         };
         ( compact $decorator:expr ) => {
-            drain!(async CompactFormat::new($decorator).build().fuse())
+            drain!(async CompactFormat::new($decorator).build())
         };
         ( full $decorator:expr ) => {
-            drain!(async FullFormat::new($decorator).build().fuse())
+            drain!(async FullFormat::new($decorator).build())
         };
         ( async $drain:expr ) => {
-            Async::new($drain).build().fuse()
+            Async::new(
+                LevelFilter::new($drain, Level::from_str(config.log_level.as_ref().map(String::as_str).unwrap_or("INFO"))
+                    .map_err(|_| err!(Other, "parse log level failed"))?
+                ).fuse()
+            ).build().fuse()
         }
     }
-
 
     let drain = drain!(choose config);
     Ok(Logger::root(drain, o!("version" => env!("CARGO_PKG_VERSION"))))

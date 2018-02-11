@@ -64,25 +64,35 @@ pub struct Config {
     /// TLS key
     #[structopt(long="key", requires="cert", display_order=4, parse(from_os_str))]
     pub key: Option<PathBuf>,
+
     /// TLS session buffer size
-    #[structopt(long="session-buff", requires="cert", display_order=5)]
+    #[structopt(long="session-buff", requires="cert", value_name="length", display_order=5)]
     pub session_buff_size: Option<usize>,
 
     /// chunk length
-    #[structopt(long="chunk-length", display_order=6)]
+    #[structopt(long="chunk-length", value_name="length")]
     pub chunk_length: Option<usize>,
 
     /// logging format
-    #[structopt(short="f", long="log-format", display_order=7, possible_value="compact", possible_value="full")]
-    pub format: Option<Format>,
+    #[structopt(long="log-format", value_name="FORMAT", possible_value="COMPACT", possible_value="FULL")]
+    pub log_format: Option<Format>,
 
     /// logging output
-    #[structopt(short="o", long="log-output", display_order=8, parse(from_os_str))]
+    #[structopt(long="log-output", value_name="PATH", parse(from_os_str))]
     pub log_output: Option<PathBuf>,
+
+    /// logging level
+    #[structopt(
+        long="log-level",
+        value_name="LEVEL",
+        possible_value="OFF", possible_value="CRITICAL", possible_value="ERROR",
+        possible_value="WARN", possible_value="INFO", possible_value="DEBUG", possible_value="TRACE"
+    )]
+    pub log_level: Option<String>,
 
     /// read config from file
     #[serde(skip_serializing)]
-    #[structopt(short="c", long="config", display_order=9, parse(from_os_str))]
+    #[structopt(short="c", long="config", parse(from_os_str))]
     pub config: Option<PathBuf>,
 
     /// disable keepalive
@@ -91,7 +101,7 @@ pub struct Config {
     pub no_keepalive: bool,
 
     #[structopt(hidden=true)]
-    pub keepalive: Option<bool>
+    pub keepalive: Option<bool>,
 }
 
 
@@ -126,8 +136,9 @@ fn make_config() -> io::Result<Config> {
         merge_config!(addr);
         merge_config!(session_buff_size);
         merge_config!(chunk_length);
-        merge_config!(format);
+        merge_config!(log_format);
         merge_config!(log_output);
+        merge_config!(log_level);
         merge_config!(root -> |p| path.with_file_name(p));
         merge_config!(cert -> |p| path.with_file_name(p));
         merge_config!(key -> |p| path.with_file_name(p));
@@ -180,7 +191,7 @@ fn start(config: Config) -> io::Result<()> {
             root: Arc::clone(&root),
             log: log.clone(),
             chunk_length: chunk_length,
-            #[cfg(feature = "sendfile")] socket: None
+            #[cfg(feature = "sendfile")] socket: None,
         };
 
         if let Some(ref tls_config) = maybe_tls_config {

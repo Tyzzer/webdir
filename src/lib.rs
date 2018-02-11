@@ -47,7 +47,7 @@ pub struct Httpd {
     pub chunk_length: usize,
 
     #[cfg(feature = "sendfile")]
-    pub socket: Option<Arc<BiLock<TcpStream>>>
+    pub socket: Option<Arc<BiLock<TcpStream>>>,
 }
 
 impl Service for Httpd {
