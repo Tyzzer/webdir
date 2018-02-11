@@ -1,4 +1,3 @@
-use std::mem;
 use std::ops::Add;
 use std::ffi::OsStr;
 use std::path::{ Path, PathBuf, Component };
@@ -91,7 +90,11 @@ fn test_path_canonicalize() {
 
 #[inline]
 pub fn u64_to_bytes(x: u64) -> [u8; 8] {
-    unsafe { mem::transmute(x) }
+    use byteorder::{ ByteOrder, LittleEndian };
+
+    let mut buf = [0; 8];
+    LittleEndian::write_u64(&mut buf, x);
+    buf
 }
 
 #[test]

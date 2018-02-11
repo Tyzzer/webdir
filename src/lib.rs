@@ -11,6 +11,7 @@ extern crate tokio_io;
 extern crate hyper;
 extern crate maud;
 extern crate percent_encoding;
+extern crate byteorder;
 extern crate chrono;
 extern crate unbytify;
 extern crate humanesort;
@@ -46,11 +47,8 @@ pub struct Httpd {
     pub log: Logger,
     pub chunk_length: usize,
 
-    #[cfg(feature = "sendfile")]
-    pub socket: Option<Arc<BiLock<TcpStream>>>,
-
-    #[cfg(feature = "sendfile")]
-    pub use_sendfile: bool
+    #[cfg(feature = "sendfile")] pub socket: Option<Arc<BiLock<TcpStream>>>,
+    #[cfg(feature = "sendfile")] pub use_sendfile: bool
 }
 
 impl Service for Httpd {
