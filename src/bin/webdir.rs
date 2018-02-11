@@ -1,5 +1,5 @@
 #![cfg_attr(feature = "sysalloc", feature(alloc_system, global_allocator, allocator_api))]
-#![feature(attr_literals, ip_constructors)]
+#![feature(attr_literals, ip_constructors, use_nested_groups)]
 
 #[cfg(feature = "sysalloc")] extern crate alloc_system;
 #[cfg(unix)] extern crate xdg;
@@ -14,8 +14,8 @@ extern crate futures;
 extern crate futures_cpupool;
 extern crate tokio;
 extern crate hyper;
-extern crate rustls;
-extern crate tokio_rustls;
+#[cfg(feature = "tls")] extern crate rustls;
+#[cfg(feature = "tls")] extern crate tokio_rustls;
 #[macro_use] extern crate webdir;
 
 mod utils;
@@ -32,15 +32,14 @@ use futures::future::{ self, Executor };
 use futures_cpupool::CpuPool;
 use hyper::Chunk;
 use hyper::server::Http;
-use hyper::error::Error as HyperError;
 use tokio::net::TcpListener;
-use rustls::{ ServerConfig, ServerSessionMemoryCache, NoClientAuth };
-use tokio_rustls::ServerConfigExt;
 use webdir::Httpd;
-use utils::{
-    Format,
-    read_config, init_logging, load_certs, load_keys
-};
+use utils::{ Format, read_config, init_logging };
+
+#[cfg(feature = "tls")] use rustls::{ ServerConfig, ServerSessionMemoryCache, NoClientAuth };
+#[cfg(feature = "tls")] use tokio_rustls::ServerConfigExt;
+#[cfg(feature = "tls")] use utils::{ load_certs, load_keys };
+#[cfg(feature = "tls")] use hyper::error::Error as HyperError;
 
 #[cfg(feature = "sysalloc")]
 #[global_allocator]
@@ -59,13 +58,17 @@ pub struct Config {
     pub root: Option<PathBuf>,
 
     /// TLS certificate
+    #[cfg(feature = "tls")]
     #[structopt(long="cert", requires="key", display_order=3, parse(from_os_str))]
     pub cert: Option<PathBuf>,
+
     /// TLS key
+    #[cfg(feature = "tls")]
     #[structopt(long="key", requires="cert", display_order=4, parse(from_os_str))]
     pub key: Option<PathBuf>,
 
     /// TLS session buffer size
+    #[cfg(feature = "tls")]
     #[structopt(long="session-buff", requires="cert", value_name="length", display_order=5)]
     pub session_buff_size: Option<usize>,
 
@@ -134,14 +137,15 @@ fn make_config() -> io::Result<Config> {
         }
 
         merge_config!(addr);
-        merge_config!(session_buff_size);
         merge_config!(chunk_length);
         merge_config!(log_format);
         merge_config!(log_output);
         merge_config!(log_level);
         merge_config!(root -> |p| path.with_file_name(p));
-        merge_config!(cert -> |p| path.with_file_name(p));
-        merge_config!(key -> |p| path.with_file_name(p));
+
+        #[cfg(feature = "tls")] merge_config!(session_buff_size);
+        #[cfg(feature = "tls")] merge_config!(cert -> |p| path.with_file_name(p));
+        #[cfg(feature = "tls")] merge_config!(key -> |p| path.with_file_name(p));
 
         if args_config.no_keepalive {
             args_config.keepalive = Some(false);
@@ -158,6 +162,7 @@ fn make_config() -> io::Result<Config> {
 fn start(config: Config) -> io::Result<()> {
     let log = init_logging(&config)?;
 
+    #[cfg(feature = "tls")]
     let maybe_tls_config = if let (Some(ref cert), Some(ref key)) = (config.cert, config.key) {
         let mut tls_config = ServerConfig::new(NoClientAuth::new());
         tls_config.set_single_cert(load_certs(cert)?, load_keys(key)?.remove(0));
@@ -166,6 +171,9 @@ fn start(config: Config) -> io::Result<()> {
     } else {
         None
     };
+
+    #[cfg(not(feature = "tls"))]
+    let maybe_tls_config: Option<()> = None;
 
     let root =
         if let Some(ref p) = config.root { Arc::new(Path::new(p).canonicalize()?) }
@@ -184,6 +192,7 @@ fn start(config: Config) -> io::Result<()> {
         "tls" => maybe_tls_config.is_some()
     );
 
+    #[cfg_attr(not(feature = "tls"), allow(unused_variables))]
     let done = listener.incoming().for_each(|stream| {
         let log = log.new(o!("addr" => format!("{:?}", stream.peer_addr())));
         let httpd = Httpd {
@@ -195,6 +204,7 @@ fn start(config: Config) -> io::Result<()> {
         };
 
         if let Some(ref tls_config) = maybe_tls_config {
+            #[cfg(feature = "tls")]
             let done = tls_config.accept_async(stream)
                 .map_err(HyperError::Io)
                 .and_then(move |stream| Http::<Chunk>::new()
@@ -204,6 +214,7 @@ fn start(config: Config) -> io::Result<()> {
                 .map(drop)
                 .map_err(move |err| error!(log, "http/tls"; "err" => format_args!("{}", err)));
 
+            #[cfg(feature = "tls")]
             pool.execute(done).unwrap();
         } else {
             #[cfg(feature = "sendfile")]

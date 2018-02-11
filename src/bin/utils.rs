@@ -1,19 +1,28 @@
-use std::path::{ Path, PathBuf };
-use std::fs::{ File, OpenOptions };
+use std::path::PathBuf;
+use std::fs::OpenOptions;
 use std::str::FromStr;
-use std::io::{ self, BufReader };
-use rustls::{ Certificate, PrivateKey };
-use rustls::internal::pemfile::{ certs, rsa_private_keys };
+use std::io;
 use slog::{ Level, LevelFilter, Logger };
 use super::Config;
 
+#[cfg(feature = "tls")] use std::{
+    path::Path,
+    io::BufReader,
+    fs::File
+};
 
+#[cfg(feature = "tls")] use rustls::{ Certificate, PrivateKey };
+#[cfg(feature = "tls")] use rustls::internal::pemfile::{ certs, rsa_private_keys };
+
+
+#[cfg(feature = "tls")]
 #[inline]
 pub fn load_certs(path: &Path) -> io::Result<Vec<Certificate>> {
     certs(&mut BufReader::new(File::open(path)?))
         .map_err(|_| err!(Other, "Not found cert"))
 }
 
+#[cfg(feature = "tls")]
 #[inline]
 pub fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
     rsa_private_keys(&mut BufReader::new(File::open(path)?))

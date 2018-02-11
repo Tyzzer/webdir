@@ -15,6 +15,9 @@ path = "src/bin/webdir.rs"
 doc = false
 
 [features]
+default = [ "tls" ]
+
+tls = [ "rustls", "tokio-rustls" ]
 sendfile = [ "nix", "mio" ]
 sysalloc = []
 
@@ -37,8 +40,8 @@ tokio = { git = "https://github.com/tokio-rs/tokio" }
 tokio-io = "0.1"
 hyper = { version = "0.11", default-features = false }
 
-rustls = "0.12"
-tokio-rustls = "0.5"
+rustls = { version = "0.12", optional = true }
+tokio-rustls = { version = "0.5", optional = true }
 
 percent-encoding = "1.0"
 chrono = "0.4"
