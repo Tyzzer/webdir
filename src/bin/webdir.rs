@@ -1,5 +1,5 @@
 #![cfg_attr(feature = "sysalloc", feature(alloc_system, global_allocator, allocator_api))]
-#![feature(attr_literals, ip_constructors, use_nested_groups)]
+#![feature(attr_literals, ip_constructors, use_nested_groups, option_filter)]
 
 #[cfg(feature = "sysalloc")] extern crate alloc_system;
 #[cfg(unix)] extern crate xdg;
@@ -36,7 +36,7 @@ use tokio::net::TcpListener;
 use webdir::Httpd;
 use utils::{ Format, read_config, init_logging };
 
-#[cfg(feature = "tls")] use rustls::{ ServerConfig, ServerSessionMemoryCache, NoClientAuth };
+#[cfg(feature = "tls")] use rustls::{ ServerConfig, NoClientAuth, Ticketer };
 #[cfg(feature = "tls")] use tokio_rustls::ServerConfigExt;
 #[cfg(feature = "tls")] use utils::{ load_certs, load_keys };
 #[cfg(feature = "tls")] use hyper::error::Error as HyperError;
@@ -66,11 +66,6 @@ pub struct Config {
     #[cfg(feature = "tls")]
     #[structopt(long="key", requires="cert", display_order=4, parse(from_os_str))]
     pub key: Option<PathBuf>,
-
-    /// TLS session buffer size
-    #[cfg(feature = "tls")]
-    #[structopt(long="session-buff", requires="cert", value_name="length", display_order=5)]
-    pub session_buff_size: Option<usize>,
 
     /// chunk length
     #[structopt(long="chunk-length", value_name="length", conflicts_with="use_sendfile")]
@@ -153,7 +148,6 @@ fn make_config() -> io::Result<Config> {
         merge_config!(log_level);
         merge_config!(root -> |p| path.with_file_name(p));
 
-        #[cfg(feature = "tls")] merge_config!(session_buff_size);
         #[cfg(feature = "tls")] merge_config!(cert -> |p| path.with_file_name(p));
         #[cfg(feature = "tls")] merge_config!(key -> |p| path.with_file_name(p));
 
@@ -180,14 +174,15 @@ fn start(mut config: Config) -> io::Result<()> {
     #[cfg(feature = "tls")]
     let maybe_tls_config = if let (Some(cert), Some(key)) = (config.cert.take(), config.key.take()) {
         let mut tls_config = ServerConfig::new(NoClientAuth::new());
+        tls_config.ticketer = Ticketer::new();
         tls_config.set_single_cert(load_certs(&cert)?, load_keys(&key)?.remove(0));
-        tls_config.set_persistence(ServerSessionMemoryCache::new(config.session_buff_size.unwrap_or(64)));
         Some(Arc::new(tls_config))
     } else {
         None
     };
 
-    #[cfg(not(feature = "tls"))] let maybe_tls_config: Option<()> = None;
+    #[cfg(not(feature = "tls"))]
+    let maybe_tls_config: Option<()> = None;
 
     let root =
         if let Some(ref p) = config.root { Arc::new(Path::new(p).canonicalize()?) }
@@ -195,7 +190,9 @@ fn start(mut config: Config) -> io::Result<()> {
     let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::localhost()), 0));
     let keepalive = config.keepalive.unwrap_or(true);
     let chunk_length = config.chunk_length.unwrap_or(1 << 16);
-    #[cfg(feature = "sendfile")] let sendfile_flag = config.sendfile.unwrap_or(false);
+
+    #[cfg(feature = "sendfile")]
+    let sendfile_flag = maybe_tls_config.is_none() && config.sendfile.unwrap_or(false);
 
     drop(config);
 

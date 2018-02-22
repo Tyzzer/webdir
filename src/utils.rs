@@ -57,36 +57,6 @@ pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBu
         })
 }
 
-#[test]
-fn test_path_canonicalize() {
-    let root = Path::new("/home/");
-
-    assert_eq!(
-        path_canonicalize(&root, "../../../aaa.txt"),
-        (1, PathBuf::from("/home/aaa.txt"))
-    );
-
-    assert_eq!(
-        path_canonicalize(&root, "/aa/../../../aaa.txt"),
-        (1, PathBuf::from("/home/aaa.txt"))
-    );
-
-    assert_eq!(
-        path_canonicalize(&root, "/aa/../../../"),
-        (0, PathBuf::from("/home/"))
-    );
-
-    assert_eq!(
-        path_canonicalize(&root, "aaa/bbb/ccc/../../ddd/"),
-        (2, PathBuf::from("/home/aaa/ddd/"))
-    );
-
-    assert_eq!(
-        path_canonicalize(&root, "aaa/bbb/ccc/../../ddd/aaa.txt"),
-        (3, PathBuf::from("/home/aaa/ddd/aaa.txt"))
-    );
-}
-
 
 #[inline]
 pub fn u64_to_bytes(x: u64) -> [u8; 8] {
@@ -95,12 +65,6 @@ pub fn u64_to_bytes(x: u64) -> [u8; 8] {
     let mut buf = [0; 8];
     LittleEndian::write_u64(&mut buf, x);
     buf
-}
-
-#[test]
-fn test_u64_to_bytes() {
-    assert_eq!(u64_to_bytes(0), [0; 8]);
-    assert_eq!(u64_to_bytes(::std::u64::MAX), [255; 8]);
 }
 
 
@@ -139,14 +103,55 @@ pub fn decode_path(path: &str) -> PathBuf {
     PathBuf::from(path_buf)
 }
 
-#[test]
-fn test_encode_path() {
-    assert_eq!(encode_path(OsStr::new("aaa")), "./aaa");
-    assert_eq!(encode_path(OsStr::new("中文")), "./%E4%B8%AD%E6%96%87");
-}
+#[cfg(test)]
+mod test {
+    use super::*;
 
-#[test]
-fn test_decode_path() {
-    assert_eq!(decode_path("aaa"), OsStr::new("aaa"));
-    assert_eq!(decode_path("%E4%B8%AD%E6%96%87"), OsStr::new("中文"));
+    #[test]
+    fn test_path_canonicalize() {
+        let root = Path::new("/home/");
+
+        assert_eq!(
+            path_canonicalize(&root, "../../../aaa.txt"),
+            (1, PathBuf::from("/home/aaa.txt"))
+        );
+
+        assert_eq!(
+            path_canonicalize(&root, "/aa/../../../aaa.txt"),
+            (1, PathBuf::from("/home/aaa.txt"))
+        );
+
+        assert_eq!(
+            path_canonicalize(&root, "/aa/../../../"),
+            (0, PathBuf::from("/home/"))
+        );
+
+        assert_eq!(
+            path_canonicalize(&root, "aaa/bbb/ccc/../../ddd/"),
+            (2, PathBuf::from("/home/aaa/ddd/"))
+        );
+
+        assert_eq!(
+            path_canonicalize(&root, "aaa/bbb/ccc/../../ddd/aaa.txt"),
+            (3, PathBuf::from("/home/aaa/ddd/aaa.txt"))
+        );
+    }
+
+    #[test]
+    fn test_u64_to_bytes() {
+        assert_eq!(u64_to_bytes(0), [0; 8]);
+        assert_eq!(u64_to_bytes(::std::u64::MAX), [255; 8]);
+    }
+
+    #[test]
+    fn test_encode_path() {
+        assert_eq!(encode_path(OsStr::new("aaa")), "./aaa");
+        assert_eq!(encode_path(OsStr::new("中文")), "./%E4%B8%AD%E6%96%87");
+    }
+
+    #[test]
+    fn test_decode_path() {
+        assert_eq!(decode_path("aaa"), OsStr::new("aaa"));
+        assert_eq!(decode_path("%E4%B8%AD%E6%96%87"), OsStr::new("中文"));
+    }
 }

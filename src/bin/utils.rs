@@ -12,7 +12,7 @@ use super::Config;
 };
 
 #[cfg(feature = "tls")] use rustls::{ Certificate, PrivateKey };
-#[cfg(feature = "tls")] use rustls::internal::pemfile::{ certs, rsa_private_keys };
+#[cfg(feature = "tls")] use rustls::internal::pemfile::{ certs, rsa_private_keys, pkcs8_private_keys };
 
 
 #[cfg(feature = "tls")]
@@ -23,10 +23,16 @@ pub fn load_certs(path: &Path) -> io::Result<Vec<Certificate>> {
 }
 
 #[cfg(feature = "tls")]
+#[cfg_attr(feature = "cargo-clippy", allow(or_fun_call))]
 #[inline]
 pub fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
-    rsa_private_keys(&mut BufReader::new(File::open(path)?))
-        .map_err(|_| err!(Other, "Not found keys"))
+    let fd = File::open(path)?;
+
+    rsa_private_keys(&mut BufReader::new(&fd))
+        .ok()
+        .filter(|keys| !keys.is_empty())
+        .or_else(|| pkcs8_private_keys(&mut BufReader::new(fd)).ok())
+        .ok_or(err!(Other, "Not found keys"))
 }
 
 #[cfg(unix)]
