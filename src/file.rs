@@ -94,7 +94,6 @@ mod test {
     use std::fs;
     use std::io::Write;
     use futures::Stream;
-    use futures::future::blocking;
     use self::tempdir::TempDir;
     use super::*;
 
@@ -115,7 +114,7 @@ mod test {
             .map(|chunk| chunk.unwrap().to_vec())
             .concat2();
 
-        let output = blocking(fut).wait().unwrap();
+        let output = fut.wait().unwrap();
 
         assert_eq!(output, &[42; 989][..]);
     }

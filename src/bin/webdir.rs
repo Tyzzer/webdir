@@ -55,14 +55,19 @@ pub struct Config {
     #[structopt(short="r", long="root", display_order=2, parse(from_os_str))]
     pub root: Option<PathBuf>,
 
+    /// index
+    #[serde(default)]
+    #[structopt(short="i", long="index", display_order=3)]
+    pub index: bool,
+
     /// TLS certificate
     #[cfg(feature = "tls")]
-    #[structopt(long="cert", requires="key", display_order=3, parse(from_os_str))]
+    #[structopt(long="cert", requires="key", parse(from_os_str))]
     pub cert: Option<PathBuf>,
 
     /// TLS key
     #[cfg(feature = "tls")]
-    #[structopt(long="key", requires="cert", display_order=4, parse(from_os_str))]
+    #[structopt(long="key", requires="cert", parse(from_os_str))]
     pub key: Option<PathBuf>,
 
     /// chunk length
@@ -158,6 +163,8 @@ fn make_config() -> io::Result<Config> {
                 if args_config.use_sendfile { Some(true) }
                 else { config.sendfile };
         }
+
+        args_config.index |= config.index;
     }
 
     Ok(args_config)
@@ -186,6 +193,7 @@ fn start(mut config: Config) -> io::Result<()> {
         if let Some(ref p) = config.root { Arc::new(Path::new(p).canonicalize()?) }
         else { Arc::new(env::current_dir()?) };
     let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::localhost()), 0));
+    let index = config.index;
     let keepalive = config.keepalive.unwrap_or(true);
     let chunk_length = config.chunk_length.unwrap_or(1 << 16);
 
@@ -211,7 +219,7 @@ fn start(mut config: Config) -> io::Result<()> {
             remote: pool.clone(),
             root: Arc::clone(&root),
             log: log.clone(),
-            chunk_length: chunk_length,
+            chunk_length, index,
             #[cfg(feature = "sendfile")] socket: None,
             #[cfg(feature = "sendfile")] use_sendfile: sendfile_flag
         };

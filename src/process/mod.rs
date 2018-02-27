@@ -3,7 +3,7 @@ mod entity;
 
 use std::io;
 use std::ops::Range;
-use std::path::PathBuf;
+use std::path::{ Path, PathBuf };
 use std::fs::{ Metadata, ReadDir };
 use futures::{ stream, Stream, Future };
 use futures::future::Executor;
@@ -38,9 +38,19 @@ impl<'a> Process<'a> {
         let metadata = self.path.metadata()?;
 
         if let Ok(dir) = self.path.read_dir() {
-            self.process_dir(dir)
+            let index_path = self.path.join("index.html");
+            if_chain!{
+                if self.httpd.index;
+                if let Ok(try_index) = index_path.metadata();
+                if try_index.is_file();
+                then {
+                    self.process_file(&index_path, &try_index)
+                } else {
+                    self.process_dir(dir)
+                }
+            }
         } else {
-            self.process_file(&metadata)
+            self.process_file(&self.path, &metadata)
         }
     }
 }
@@ -86,8 +96,8 @@ impl<'a> Process<'a> {
         Ok(res.with_header(header::ContentType(mime)))
     }
 
-    fn process_file(&self, metadata: &Metadata) -> io::Result<Response> {
-        let entity = Entity::new(&self.path, metadata, self.log, self.httpd.chunk_length);
+    fn process_file(&self, path: &Path, metadata: &Metadata) -> io::Result<Response> {
+        let entity = Entity::new(path, metadata, self.log, self.httpd.chunk_length);
 
         match entity.check(self.req.headers()) {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
@@ -135,7 +145,7 @@ impl<'a> Process<'a> {
                 res.set_body(body);
 
                 let fd = entity.open()?;
-                let mime_type = guess_mime_type(&self.path);
+                let mime_type = guess_mime_type(path);
 
                 let done = stream::iter_ok::<_, error::Error>(ranges.into_iter())
                     .and_then(move |range| {

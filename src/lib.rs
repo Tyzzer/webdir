@@ -2,6 +2,7 @@
 
 #[macro_use] extern crate failure;
 #[macro_use] extern crate slog;
+#[macro_use] extern crate if_chain;
 #[cfg(feature = "sendfile")] extern crate nix;
 #[cfg(feature = "sendfile")] extern crate mio;
 #[cfg(feature = "sendfile")] extern crate tokio;
@@ -46,6 +47,7 @@ pub struct Httpd {
     pub root: Arc<PathBuf>,
     pub log: Logger,
     pub chunk_length: usize,
+    pub index: bool,
 
     #[cfg(feature = "sendfile")] pub socket: Option<Arc<BiLock<TcpStream>>>,
     #[cfg(feature = "sendfile")] pub use_sendfile: bool
