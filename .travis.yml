@@ -7,5 +7,7 @@ os:
     - osx
 
 script:
-    - cargo test
+    - cargo check --no-default-features
+    - cargo check
     - cargo check --all-features
+    - cargo test

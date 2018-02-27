@@ -1,18 +1,17 @@
 #![cfg_attr(feature = "sysalloc", feature(alloc_system, global_allocator, allocator_api))]
-#![feature(attr_literals, ip_constructors, use_nested_groups, option_filter)]
+#![feature(attr_literals, ip_constructors, option_filter)]
 
 #[cfg(feature = "sysalloc")] extern crate alloc_system;
 #[cfg(unix)] extern crate xdg;
 #[macro_use] extern crate slog;
 extern crate slog_term;
 extern crate slog_async;
-#[macro_use] extern crate structopt_derive;
-extern crate structopt;
+#[macro_use] extern crate structopt;
 #[macro_use] extern crate serde_derive;
 extern crate toml;
 extern crate futures;
-extern crate futures_cpupool;
 extern crate tokio;
+extern crate tokio_threadpool;
 extern crate hyper;
 #[cfg(feature = "tls")] extern crate rustls;
 #[cfg(feature = "tls")] extern crate tokio_rustls;
@@ -28,11 +27,11 @@ use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
 use std::path::{ Path, PathBuf };
 use structopt::StructOpt;
 use futures::{ Future, Stream };
-use futures::future::{ self, Executor };
-use futures_cpupool::CpuPool;
+use futures::future::Executor;
+use tokio::net::TcpListener;
+use tokio_threadpool::ThreadPool;
 use hyper::Chunk;
 use hyper::server::Http;
-use tokio::net::TcpListener;
 use webdir::Httpd;
 use utils::{ Format, read_config, init_logging };
 
@@ -47,7 +46,6 @@ static GLOBAL: alloc_system::System = alloc_system::System;
 
 
 #[derive(StructOpt, Deserialize)]
-#[structopt]
 pub struct Config {
     /// bind address
     #[structopt(short="b", long="bind", display_order=1)]
@@ -196,7 +194,8 @@ fn start(mut config: Config) -> io::Result<()> {
 
     drop(config);
 
-    let pool = CpuPool::new_num_cpus();
+    let pool = ThreadPool::new();
+    let pool = pool.sender();
     let listener = TcpListener::bind(&addr)?;
 
     info!(log, "listening";
@@ -263,7 +262,7 @@ fn start(mut config: Config) -> io::Result<()> {
         Ok(())
     });
 
-    future::blocking(done).wait()
+    done.wait()
 }
 
 fn main() {
