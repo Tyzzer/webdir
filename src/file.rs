@@ -93,7 +93,7 @@ mod test {
 
     use std::fs;
     use std::io::Write;
-    use futures::Stream;
+    use futures::{ Future, Stream };
     use self::tempdir::TempDir;
     use super::*;
 
