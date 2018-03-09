@@ -7,7 +7,7 @@ use futures::{ Poll, Stream, Async };
 use futures::sync::{ BiLock, BiLockAcquired };
 use mio::net::TcpStream as MioTcpStream;
 use tokio::net::TcpStream;
-use tokio::reactor::PollEvented;
+use tokio::reactor::PollEvented2;
 use tokio_io::{ AsyncRead, AsyncWrite };
 use nix::{ self, errno };
 use nix::libc::off_t;
@@ -72,9 +72,9 @@ impl Stream for SendFileFut {
         #[cfg(any(apple, freebsdlike))]
         use self::bsd::sendfile;
 
-        unsafe fn as_poll_evented(t: &mut TcpStream) -> &mut PollEvented<MioTcpStream> {
+        unsafe fn as_poll_evented(t: &mut TcpStream) -> &mut PollEvented2<MioTcpStream> {
             struct PubTcpStream {
-                pub io: PollEvented<MioTcpStream>
+                pub io: PollEvented2<MioTcpStream>
             }
 
             &mut mem::transmute::<_, &mut PubTcpStream>(t).io
@@ -93,7 +93,7 @@ impl Stream for SendFileFut {
 
         let socket = unsafe { as_poll_evented(&mut socket) };
 
-        if let Async::NotReady = socket.poll_write() {
+        if let Async::NotReady = socket.poll_write_ready()? {
             return Ok(Async::NotReady)
         }
 
@@ -105,7 +105,7 @@ impl Stream for SendFileFut {
                 // TODO https://github.com/tokio-rs/tokio-core/issues/196
                 // socket.need_write();
 
-                socket.need_write()?;
+                socket.clear_write_ready()?;
                 Ok(Async::NotReady)
             },
             Err(err) => Err(err.into())

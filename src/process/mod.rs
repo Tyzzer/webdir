@@ -6,7 +6,6 @@ use std::ops::Range;
 use std::path::{ Path, PathBuf };
 use std::fs::{ Metadata, ReadDir };
 use futures::{ stream, Stream, Future };
-use futures::future::Executor;
 use hyper::{ header, Request, Response, Head, Body, StatusCode };
 use mime_guess::guess_mime_type;
 use maud::Render;
@@ -88,7 +87,7 @@ impl<'a> Process<'a> {
                 .map(drop)
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-            self.httpd.remote.execute(done).unwrap();
+            self.httpd.remote.spawn(done);
         }
 
         // TODO https://github.com/hyperium/mime/issues/52
@@ -170,7 +169,7 @@ impl<'a> Process<'a> {
                     .map(drop)
                     .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-                self.httpd.remote.execute(done).unwrap();
+                self.httpd.remote.spawn(done);
 
                 Ok(res
                     .with_status(StatusCode::PartialContent)
@@ -200,7 +199,7 @@ impl<'a> Process<'a> {
                 .map(drop)
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-            self.httpd.remote.execute(done).unwrap();
+            self.httpd.remote.spawn(done);
         }
 
         Ok(res)
@@ -225,7 +224,7 @@ impl<'a> Process<'a> {
                 .for_each(|_| future::ok(()))
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-            self.httpd.remote.execute(done).unwrap();
+            self.httpd.remote.spawn(done);
         } else {
             let log = self.log.clone();
             let (send, body) = Body::pair();
@@ -238,7 +237,7 @@ impl<'a> Process<'a> {
                 .map(drop)
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
-            self.httpd.remote.execute(done).unwrap();
+            self.httpd.remote.spawn(done);
         }
 
         Ok(res)

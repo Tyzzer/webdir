@@ -11,7 +11,6 @@ extern crate slog_async;
 extern crate toml;
 extern crate futures;
 extern crate tokio;
-extern crate tokio_threadpool;
 extern crate hyper;
 #[cfg(feature = "tls")] extern crate rustls;
 #[cfg(feature = "tls")] extern crate tokio_rustls;
@@ -27,9 +26,8 @@ use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
 use std::path::{ Path, PathBuf };
 use structopt::StructOpt;
 use futures::{ Future, Stream };
-use futures::future::Executor;
 use tokio::net::TcpListener;
-use tokio_threadpool::ThreadPool;
+use tokio::runtime::Runtime;
 use hyper::Chunk;
 use hyper::server::Http;
 use webdir::Httpd;
@@ -202,8 +200,8 @@ fn start(mut config: Config) -> io::Result<()> {
 
     drop(config);
 
-    let pool = ThreadPool::new();
-    let pool = pool.sender();
+    let mut rt = Runtime::new()?;
+    let executor = rt.executor();
     let listener = TcpListener::bind(&addr)?;
 
     info!(log, "listening";
@@ -213,10 +211,10 @@ fn start(mut config: Config) -> io::Result<()> {
         "tls" => maybe_tls_config.is_some()
     );
 
-    let done = listener.incoming().for_each(|stream| {
+    let done = listener.incoming().for_each(move |stream| {
         let log = log.new(o!("addr" => format!("{:?}", stream.peer_addr())));
         let httpd = Httpd {
-            remote: pool.clone(),
+            remote: executor.clone(),
             root: Arc::clone(&root),
             log: log.clone(),
             chunk_length, index,
@@ -236,7 +234,7 @@ fn start(mut config: Config) -> io::Result<()> {
                 .map_err(move |err| error!(log, "http/tls"; "err" => format_args!("{}", err)));
 
             #[cfg(feature = "tls")]
-            pool.execute(done).unwrap();
+            executor.spawn(done);
         } else {
             #[cfg(feature = "sendfile")]
             let done = {
@@ -264,13 +262,16 @@ fn start(mut config: Config) -> io::Result<()> {
                 .map(drop)
                 .map_err(move |err| error!(log, "http"; "err" => format_args!("{}", err)));
 
-            pool.execute(done).unwrap();
+            executor.spawn(done);
         }
 
         Ok(())
     });
 
-    done.wait()
+    rt.spawn(done.map_err(|err| eprintln!("Error: {:?}", err)));
+    let _ = rt.shutdown_on_idle().wait();
+
+    Ok(())
 }
 
 fn main() {
