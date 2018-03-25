@@ -112,7 +112,7 @@ impl<'a, 'b> Entity<'a, 'b> {
 
         if let Some(&header::IfModifiedSince(ref date)) = headers.get::<header::IfModifiedSince>() {
             if let Ok(ndate) = self.metadata.modified() {
-                if date >= &header::HttpDate::from(ndate) {
+                if *date >= header::HttpDate::from(ndate) {
                     return EntifyResult::Err(not_modified(self.log, format_args!("{}", date)));
                 }
             }
