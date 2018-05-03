@@ -1,4 +1,4 @@
-#![feature(proc_macro)]
+#![feature(proc_macro, proc_macro_non_items)]
 
 #[macro_use] extern crate failure;
 #[macro_use] extern crate slog;
@@ -49,7 +49,6 @@ pub struct Httpd {
     pub index: bool,
 
     #[cfg(feature = "sendfile")] pub socket: Option<Arc<BiLock<TcpStream>>>,
-    #[cfg(feature = "sendfile")] pub use_sendfile: bool
 }
 
 impl Service for Httpd {

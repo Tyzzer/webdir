@@ -198,6 +198,9 @@ fn start(mut config: Config) -> io::Result<()> {
     #[cfg(feature = "sendfile")]
     let sendfile_flag = maybe_tls_config.is_none() && config.sendfile.unwrap_or(false);
 
+    #[cfg(not(feature = "sendfile"))]
+    let sendfile_flag = false;
+
     drop(config);
 
     let mut rt = Runtime::new()?;
@@ -219,7 +222,6 @@ fn start(mut config: Config) -> io::Result<()> {
             log: log.clone(),
             chunk_length, index,
             #[cfg(feature = "sendfile")] socket: None,
-            #[cfg(feature = "sendfile")] use_sendfile: sendfile_flag
         };
 
         if let Some(ref tls_config) = maybe_tls_config {
@@ -236,33 +238,37 @@ fn start(mut config: Config) -> io::Result<()> {
             #[cfg(feature = "tls")]
             executor.spawn(done);
         } else {
-            #[cfg(feature = "sendfile")]
-            let done = {
-                use futures::sync::BiLock;
-                use webdir::sendfile::BiTcpStream;
+            if sendfile_flag {
+                #[cfg(feature = "sendfile")]
+                {
+                    use futures::sync::BiLock;
+                    use webdir::sendfile::BiTcpStream;
 
-                let mut httpd = httpd;
-                let (stream, stream2) = BiLock::new(stream);
-                httpd.socket = Some(Arc::new(stream2));
+                    let mut httpd = httpd;
+                    let (stream, stream2) = BiLock::new(stream);
+                    httpd.socket = Some(Arc::new(stream2));
 
-                stream.lock()
-                    .map(BiTcpStream)
-                    .and_then(move |stream| Http::<Chunk>::new()
-                        .keep_alive(keepalive)
-                        .serve_connection(stream, httpd)
-                        .map(drop)
-                        .map_err(move |err| error!(log, "http"; "err" => format_args!("{}", err)))
-                    )
+                    let done = stream.lock()
+                        .map(BiTcpStream)
+                        .and_then(move |stream| Http::<Chunk>::new()
+                            .keep_alive(keepalive)
+                            .serve_connection(stream, httpd)
+                            .map(drop)
+                            .map_err(move |err| error!(log, "http"; "err" => format_args!("{}", err)))
+                        );
+
+                    executor.spawn(done);
+                }
+            } else {
+                let done = Http::<Chunk>::new()
+                    .keep_alive(keepalive)
+                    .serve_connection(stream, httpd)
+                    .map(drop)
+                    .map_err(move |err| error!(log, "http"; "err" => format_args!("{}", err)));
+
+                executor.spawn(done);
             };
 
-            #[cfg(not(feature = "sendfile"))]
-            let done = Http::<Chunk>::new()
-                .keep_alive(keepalive)
-                .serve_connection(stream, httpd)
-                .map(drop)
-                .map_err(move |err| error!(log, "http"; "err" => format_args!("{}", err)));
-
-            executor.spawn(done);
         }
 
         Ok(())

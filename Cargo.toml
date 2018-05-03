@@ -41,11 +41,11 @@ tokio-io = "0.1"
 hyper = { version = "0.11", default-features = false }
 
 rustls = { version = "0.12", optional = true }
-tokio-rustls = { version = "0.6.0-alpha", default-features = false, features = [ "tokio" ], optional = true }
+tokio-rustls = { version = "0.6.0", default-features = false, features = [ "tokio" ], optional = true }
 
 percent-encoding = "1.0"
 chrono = "0.4"
-unbytify = "0.1"
+unbytify = "0.2"
 byteorder = "1.0"
 humanesort = "0.1.0-alpha"
 base64 = "0.9"

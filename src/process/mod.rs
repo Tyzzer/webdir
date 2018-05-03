@@ -102,25 +102,23 @@ impl<'a> Process<'a> {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
             EntifyResult::None => {
                 let fd = entity.open()?;
-                let length = fd.length;
                 self.send(fd, None)
                     .map(|res| res
                         .with_headers(entity.headers(false))
-                        .with_header(header::ContentLength(length))
+                        .with_header(header::ContentLength(entity.length))
                     )
             },
             EntifyResult::One(range) => {
                 debug!(self.log, "process"; "range" => format_args!("{:?}", range));
 
                 let fd = entity.open()?;
-                let length = fd.length;
                 self.send(fd, Some(range.clone()))
                     .map(|res| res
                          .with_status(StatusCode::PartialContent)
                          .with_headers(entity.headers(false))
                          .with_header(header::ContentLength(range.end - range.start))
                          .with_header(header::ContentRange(header::ContentRangeSpec::Bytes {
-                            range: Some((range.start, range.end - 1)), instance_length: Some(length)
+                            range: Some((range.start, range.end - 1)), instance_length: Some(entity.length)
                         }))
                     )
             },
@@ -214,7 +212,7 @@ impl<'a> Process<'a> {
 
         if self.req.method() == &Head {
             res.set_body(Body::empty());
-        } else if let (&Some(ref socket), true) = (&self.httpd.socket, self.httpd.use_sendfile) {
+        } else if let &Some(ref socket) = &self.httpd.socket {
             let log = self.log.clone();
             res.set_body(Body::empty());
 

@@ -1,7 +1,9 @@
 use std::{ io, fs, cmp };
 use std::ops::Range;
+use std::path::Path;
 use futures::{ Stream, Poll, Async };
 use tokio_io::io::Window;
+use tokio::fs::file::{ File as TokioFile, OpenFuture };
 use hyper;
 use ::error;
 
@@ -18,6 +20,13 @@ pub struct File {
 }
 
 impl File {
+    #[inline]
+    pub fn open<P>(path: P) -> OpenFuture<P>
+        where P: AsRef<Path> + Send + 'static
+    {
+        TokioFile::open(path)
+    }
+
     #[inline]
     pub fn new(fd: fs::File, chunk_length: usize, length: u64) -> io::Result<Self> {
         Ok(File { fd, chunk_length, length })

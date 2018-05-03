@@ -20,8 +20,8 @@ pub struct Entity<'a, 'b> {
     log: &'a Logger,
     path: &'b Path,
     chunk_length: usize,
-    length: u64,
-    etag: header::EntityTag
+    etag: header::EntityTag,
+    pub length: u64
 }
 
 pub enum EntifyResult {
@@ -73,11 +73,11 @@ impl<'a, 'b> Entity<'a, 'b> {
         file::File::new(fd, self.chunk_length, self.length)
     }
 
-    pub fn headers(self, is_multipart: bool) -> Headers {
+    pub fn headers(&self, is_multipart: bool) -> Headers {
         let mut headers = Headers::new();
 
         headers.set(header::AcceptRanges(vec!(header::RangeUnit::Bytes)));
-        headers.set(header::ETag(self.etag));
+        headers.set(header::ETag(self.etag.clone()));
 
         if is_multipart {
             // TODO https://github.com/hyperium/mime/issues/52
