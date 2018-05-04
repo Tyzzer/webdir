@@ -131,7 +131,10 @@ impl<'a> Process<'a> {
                     )
             },
             EntifyResult::Vec(ranges) => if self.req.method() == &Head {
-                Ok(Response::new())
+                Ok(Response::new()
+                   .with_status(StatusCode::PartialContent)
+                   .with_headers(entity.headers(true))
+                )
             } else {
                 const BOUNDARY_LINE: &str = concat!("--", boundary!(), "\r\n");
 
