@@ -1,4 +1,4 @@
-use std::{ io, fs, cmp };
+use std::{ io, fs, cmp, mem };
 use std::ops::Range;
 use std::path::Path;
 use std::io::SeekFrom;
@@ -35,7 +35,7 @@ impl File {
 
     #[cfg(feature = "sendfile")]
     #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
-    pub fn sendfile(self, range: Range<u64>, socket: Arc<BiLock<TcpStream>>) -> io::Result<SendFileFut> {
+    pub fn sendfile(self, range: Range<u64>, socket: Arc<BiLock<TcpStream>>) -> SendFileFut {
         unsafe fn as_fs_file(t: TokioFile) -> fs::File {
             struct PubTokioFile {
                 std: Option<fs::File>
@@ -44,12 +44,12 @@ impl File {
             mem::transmute::<_, PubTokioFile>(t).std.unwrap()
         }
 
-        Ok(SendFileFut {
+        SendFileFut {
             socket,
             fd: unsafe { as_fs_file(self.fd) },
             offset: range.start as _,
             end: range.end as _
-        })
+        }
     }
 }
 

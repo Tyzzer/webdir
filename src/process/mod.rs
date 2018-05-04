@@ -7,7 +7,7 @@ use std::ops::Range;
 use std::io::{ self, SeekFrom };
 use std::path::{ Path, PathBuf };
 use std::fs::{ Metadata, ReadDir };
-use futures::{ stream, Stream, Future };
+use futures::{ future, stream, Stream, Future };
 use tokio::fs::File as TokioFile;
 use hyper::{ header, Request, Response, Head, Body, StatusCode };
 use mime_guess::guess_mime_type;
@@ -175,10 +175,39 @@ impl<'a> Process<'a> {
         }
     }
 
-    #[cfg(not(feature = "sendfile"))]
     fn send(&self, entity: &Entity, len: u64, range: Option<Range<u64>>) -> io::Result<Response> {
+        #[cfg(feature = "sendfile")] let sendfile_flag = self.httpd.socket.is_some();
+        #[cfg(not(feature = "sendfile"))] let sendfile_flag = false;
+
         if self.req.method() == &Head {
             Ok(Response::new())
+        } else if sendfile_flag {
+            #[cfg(feature = "sendfile")]
+            {
+                let socket = self.httpd.socket.clone().unwrap();
+                let log = self.log.clone();
+                let range = range.unwrap_or_else(|| 0..len);
+                let chunk_length = self.httpd.chunk_length;
+                let mut res = Response::new();
+                res.set_body(Body::empty());
+
+                debug!(self.log, "process"; "send" => "sendfile");
+
+                let done = TokioFile::open(entity.path.to_owned())
+                    .map_err(Into::into)
+                    .and_then(move |fd| file::File::new(fd, chunk_length, len)
+                        .sendfile(range, socket)
+                        .for_each(|_| future::ok(()))
+                    )
+                    .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
+
+                self.httpd.remote.spawn(done);
+
+                Ok(res)
+            }
+
+            #[cfg(not(feature = "sendfile"))]
+            unreachable!()
         } else {
             let log = self.log.clone();
             let range = range.unwrap_or_else(|| 0..len);
@@ -200,43 +229,5 @@ impl<'a> Process<'a> {
 
             Ok(res)
         }
-    }
-
-    #[cfg(feature = "sendfile")]
-    fn send(&self, fd: file::File, range: Option<Range<u64>>) -> io::Result<Response> {
-        use futures::future;
-
-        let mut res = Response::new();
-        let range = range.unwrap_or_else(|| 0..fd.length);
-
-        if self.req.method() == &Head {
-            res.set_body(Body::empty());
-        } else if let Some(socket) = self.httpd.socket.clone() {
-            let log = self.log.clone();
-            res.set_body(Body::empty());
-
-            debug!(self.log, "process"; "send" => "sendfile");
-
-            let done = fd.sendfile(range, socket)?
-                .for_each(|_| future::ok(()))
-                .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
-
-            self.httpd.remote.spawn(done);
-        } else {
-            let log = self.log.clone();
-            let (send, body) = Body::pair();
-            res.set_body(body);
-
-            debug!(self.log, "process"; "send" => "readchunk");
-
-            let done = fd.read(range)?
-                .forward(send)
-                .map(drop)
-                .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
-
-            self.httpd.remote.spawn(done);
-        }
-
-        Ok(res)
     }
 }

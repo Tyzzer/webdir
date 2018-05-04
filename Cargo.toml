@@ -18,7 +18,7 @@ doc = false
 default = [ "tls" ]
 
 tls = [ "rustls", "tokio-rustls" ]
-sendfile = [ "nix", "mio" ]
+sendfile = [ "nix", "mio", "bytes" ]
 sysalloc = []
 
 [target.'cfg(unix)'.dependencies]
@@ -32,6 +32,7 @@ structopt = "0.2"
 structopt-derive = "0.2"
 failure = "0.1"
 
+bytes = { version = "0.4", optional = true }
 futures = "0.1"
 futures-cpupool = "0.1"
 mio = { version = "0.6", optional = true }
