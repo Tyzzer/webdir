@@ -1,13 +1,11 @@
 mod sortdir;
 mod entity;
 
-use std::rc::Rc;
-use std::cell::RefCell;
+use std::io;
 use std::ops::Range;
-use std::io::{ self, SeekFrom };
 use std::path::{ Path, PathBuf };
 use std::fs::{ Metadata, ReadDir };
-use futures::{ future, stream, Stream, Future };
+use futures::{ stream, Stream, Future };
 use tokio::fs::File as TokioFile;
 use hyper::{ header, Request, Response, Head, Body, StatusCode };
 use mime_guess::guess_mime_type;
@@ -184,6 +182,8 @@ impl<'a> Process<'a> {
         } else if sendfile_flag {
             #[cfg(feature = "sendfile")]
             {
+                use futures::future;
+
                 let socket = self.httpd.socket.clone().unwrap();
                 let log = self.log.clone();
                 let range = range.unwrap_or_else(|| 0..len);

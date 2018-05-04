@@ -1,8 +1,7 @@
-use std::{ io, fs, cmp, mem };
+use std::{ io, cmp };
 use std::ops::Range;
-use std::path::Path;
 use std::io::SeekFrom;
-use futures::{ Future, Stream, Poll, Async };
+use futures::{ Stream, Poll, Async };
 use tokio_io::AsyncRead;
 use tokio_io::io::Window;
 use tokio::fs::file::File as TokioFile;
@@ -36,6 +35,8 @@ impl File {
     #[cfg(feature = "sendfile")]
     #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
     pub fn sendfile(self, range: Range<u64>, socket: Arc<BiLock<TcpStream>>) -> SendFileFut {
+        use std::{ fs, mem };
+
         unsafe fn as_fs_file(t: TokioFile) -> fs::File {
             struct PubTokioFile {
                 std: Option<fs::File>

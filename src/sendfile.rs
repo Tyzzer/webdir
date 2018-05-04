@@ -9,7 +9,6 @@ use mio::net::TcpStream as MioTcpStream;
 use tokio::net::TcpStream;
 use tokio::reactor::PollEvented2;
 use tokio_io::{ AsyncRead, AsyncWrite };
-use tokio::fs::File as TokioFile;
 use nix::{ self, errno };
 use nix::libc::off_t;
 use self::bytes::buf::{ Buf, BufMut };

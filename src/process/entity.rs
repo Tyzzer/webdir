@@ -1,4 +1,4 @@
-use std::{ io, cmp, fs };
+use std::cmp;
 use std::ops::Range;
 use std::hash::Hasher;
 use std::path::Path;
@@ -12,7 +12,6 @@ use siphasher::sip::SipHasher;
 use base64::{ URL_SAFE_NO_PAD, encode_config };
 use ::response::{ BOUNDARY, fail, not_modified };
 use ::utils::u64_to_bytes;
-use ::file;
 
 
 pub struct Entity<'a, 'b> {
