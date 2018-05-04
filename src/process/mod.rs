@@ -77,13 +77,24 @@ impl<'a> Process<'a> {
 
             debug!(self.log, "process"; "send" => "senddir");
 
-            let done = stream::once::<_, error::Error>(Ok(chunk!(HTML_HEADER)))
-                .chain(stream::once(Ok(chunk!(into up(self.is_root)))))
-                .chain(stream::iter_ok(SortDir::new(dir))
-                    .map(|p| p.and_then(|m| chunk!(into m.render())).map_err(Into::into))
-                )
-                .chain(stream::once(Ok(chunk!(HTML_FOOTER))))
-                .map_err(error::Error::from)
+            let fut = chain! {
+                type Item = _;
+                type Error = error::Error;
+
+                ( HTML_HEADER ),
+                ( up(self.is_root).into_string() ),
+                ( + stream::iter_ok(SortDir::new(dir)
+                        .map(|entry| entry
+                            .map(|entry| entry.render().into_string())
+                            .map(Into::into)
+                            .map_err(Into::into)
+                        )
+                    )
+                ),
+                ( HTML_FOOTER )
+            };
+
+            let done = fut
                 .forward(send)
                 .map(drop)
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
@@ -150,6 +161,9 @@ impl<'a> Process<'a> {
                             let fd = file::File::new(fd, chunk_length, length);
 
                             chain! {
+                                type Item = _;
+                                type Error = _;
+
                                 ( BOUNDARY_LINE ),
                                 ( format!("{}\r\n", headers) ),
                                 ( + fd.read(range) ),

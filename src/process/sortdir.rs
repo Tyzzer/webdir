@@ -9,17 +9,17 @@ use humanesort::HumaneOrder;
 use ::utils::encode_path;
 
 
-pub type IoREntry = io::Result<Entry>;
+pub type IoEntry = io::Result<Entry>;
 pub const SORTDIR_BUFF_LENGTH: usize = 1 << 12;
 
 pub struct SortDir {
     readdir: ReadDir,
-    buf: SmallVec<[IoREntry; 12]>
+    buf: SmallVec<[IoEntry; 12]>
 }
 
 impl SortDir {
     pub fn new(mut readdir: ReadDir) -> Self {
-        fn sort_by_entry(x: &IoREntry, y: &IoREntry) -> Ordering {
+        fn sort_by_entry(x: &IoEntry, y: &IoEntry) -> Ordering {
             if let (&Ok(ref x), &Ok(ref y)) = (x, y) {
                 match Ord::cmp(&x.ty, &y.ty) {
                     Ordering::Equal => HumaneOrder::humane_cmp(
@@ -45,7 +45,7 @@ impl SortDir {
 }
 
 impl Iterator for SortDir {
-    type Item = IoREntry;
+    type Item = IoEntry;
 
     fn next(&mut self) -> Option<Self::Item> {
         self.buf.pop()

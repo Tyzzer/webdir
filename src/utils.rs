@@ -29,25 +29,19 @@ macro_rules! err {
     }
 }
 
-macro_rules! chunk {
-    ( into $chunk:expr ) => {
-        Ok(::hyper::Chunk::from($chunk.into_string()))
-    };
-    ( $chunk:expr ) => {
-        Ok(::hyper::Chunk::from($chunk))
-    };
-}
-
-
 macro_rules! chain {
     ( @parse + $stream:expr ) => {
         $stream
     };
     ( @parse $chunk:expr ) => {
-        ::tokio::prelude::stream::once(Ok(Ok(::hyper::Chunk::from($chunk))))
+        ::futures::stream::once(Ok(Ok(::hyper::Chunk::from($chunk))))
     };
-    ( $( ( $( $stream:tt )* ) ),* ) => {
-        ::tokio::prelude::stream::empty()
+    (
+        type Item = $item:ty;
+        type Error = $err:ty;
+        $( ( $( $stream:tt )* ) ),*
+    ) => {
+        ::futures::stream::empty::<$item, $err>()
         $(
             .chain(chain!(@parse $( $stream )*))
         )*
