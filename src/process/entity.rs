@@ -16,12 +16,11 @@ use ::file;
 
 
 pub struct Entity<'a, 'b> {
+    pub path: &'b Path,
+    pub length: u64,
     metadata: &'a Metadata,
     log: &'a Logger,
-    path: &'b Path,
-    chunk_length: usize,
-    etag: header::EntityTag,
-    pub length: u64
+    etag: header::EntityTag
 }
 
 pub enum EntifyResult {
@@ -32,9 +31,9 @@ pub enum EntifyResult {
 }
 
 impl<'a, 'b> Entity<'a, 'b> {
-    pub fn new(path: &'b Path, metadata: &'a Metadata, log: &'a Logger, chunk_length: usize) -> Self {
+    pub fn new(path: &'b Path, metadata: &'a Metadata, log: &'a Logger) -> Self {
         let length = metadata.len();
-        Entity { path, metadata, log, chunk_length, length, etag: Self::etag(metadata) }
+        Entity { path, metadata, log, length, etag: Self::etag(metadata) }
     }
 
     #[cfg(unix)]
@@ -65,12 +64,6 @@ impl<'a, 'b> Entity<'a, 'b> {
             &u64_to_bytes(hasher.finish()),
             URL_SAFE_NO_PAD
         ))
-    }
-
-    #[inline]
-    pub fn open(&self) -> io::Result<file::File> {
-        let fd = fs::File::open(&*self.path)?;
-        file::File::new(fd, self.chunk_length, self.length)
     }
 
     pub fn headers(&self, is_multipart: bool) -> Headers {

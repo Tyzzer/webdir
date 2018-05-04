@@ -9,6 +9,7 @@ use mio::net::TcpStream as MioTcpStream;
 use tokio::net::TcpStream;
 use tokio::reactor::PollEvented2;
 use tokio_io::{ AsyncRead, AsyncWrite };
+use tokio_fs::File as TokioFile;
 use nix::{ self, errno };
 use nix::libc::off_t;
 use self::bytes::buf::{ Buf, BufMut };
@@ -55,10 +56,10 @@ impl AsyncWrite for BiTcpStream {
 
 
 pub struct SendFileFut {
-    pub socket: Arc<BiLock<TcpStream>>,
-    pub fd: fs::File,
-    pub offset: off_t,
-    pub end: usize
+    socket: Arc<BiLock<TcpStream>>,
+    fd: fs::File,
+    offset: off_t,
+    end: usize
 }
 
 impl Stream for SendFileFut {

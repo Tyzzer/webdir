@@ -1,11 +1,14 @@
 mod sortdir;
 mod entity;
 
-use std::io;
+use std::rc::Rc;
+use std::cell::RefCell;
 use std::ops::Range;
+use std::io::{ self, SeekFrom };
 use std::path::{ Path, PathBuf };
 use std::fs::{ Metadata, ReadDir };
 use futures::{ stream, Stream, Future };
+use tokio::fs::File as TokioFile;
 use hyper::{ header, Request, Response, Head, Body, StatusCode };
 use mime_guess::guess_mime_type;
 use maud::Render;
@@ -96,23 +99,19 @@ impl<'a> Process<'a> {
     }
 
     fn process_file(&self, path: &Path, metadata: &Metadata) -> io::Result<Response> {
-        let entity = Entity::new(path, metadata, self.log, self.httpd.chunk_length);
+        let entity = Entity::new(path, metadata, self.log);
 
         match entity.check(self.req.headers()) {
             EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
-            EntifyResult::None => {
-                let fd = entity.open()?;
-                self.send(fd, None)
-                    .map(|res| res
-                        .with_headers(entity.headers(false))
-                        .with_header(header::ContentLength(entity.length))
-                    )
-            },
+            EntifyResult::None => self.send(&entity, entity.length, None)
+                .map(|res| res
+                    .with_headers(entity.headers(false))
+                    .with_header(header::ContentLength(entity.length))
+                ),
             EntifyResult::One(range) => {
                 debug!(self.log, "process"; "range" => format_args!("{:?}", range));
 
-                let fd = entity.open()?;
-                self.send(fd, Some(range.clone()))
+                self.send(&entity, entity.length, Some(range.clone()))
                     .map(|res| res
                          .with_status(StatusCode::PartialContent)
                          .with_headers(entity.headers(false))
@@ -122,85 +121,85 @@ impl<'a> Process<'a> {
                         }))
                     )
             },
-            EntifyResult::Vec(ranges) => {
+            EntifyResult::Vec(ranges) => if self.req.method() == &Head {
+                Ok(Response::new())
+            } else {
                 const BOUNDARY_LINE: &str = concat!("--", boundary!(), "\r\n");
 
                 debug!(self.log, "process"; "ranges" => format_args!("{:?}", ranges));
 
-                let mut res = Response::new();
-
-                if self.req.method() == &Head {
-                    return Ok(res
-                        .with_status(StatusCode::PartialContent)
-                        .with_headers(entity.headers(true))
-                        .with_body(Body::empty())
-                    );
-                }
-
                 let log = self.log.clone();
+                let chunk_length = self.httpd.chunk_length;
+                let mime_type = guess_mime_type(path);
+                let mut res = Response::new();
                 let (send, body) = Body::pair();
                 res.set_body(body);
 
-                let fd = entity.open()?;
-                let mime_type = guess_mime_type(path);
+                let done = TokioFile::open(entity.path.to_owned())
+                    .map_err(Into::into)
+                    .and_then(move |fd| stream::iter_ok(ranges.into_iter())
+                        .zip(file::try_clone(fd))
+                        .map(move |(range, fd)| {
+                            let length = range.end - range.start;
 
-                let done = stream::iter_ok::<_, error::Error>(ranges.into_iter())
-                    .and_then(move |range| {
-                        let length = range.end - range.start;
-                        let mut headers = header::Headers::new();
-                        headers.set(header::ContentType(mime_type.clone()));
-                        headers.set(header::ContentRange(header::ContentRangeSpec::Bytes {
-                            range: Some((range.start, range.end - 1)), instance_length: Some(length)
-                        }));
+                            let mut headers = header::Headers::new();
+                            headers.set(header::ContentType(mime_type.clone()));
+                            headers.set(header::ContentRange(header::ContentRangeSpec::Bytes {
+                                range: Some((range.start, range.end - 1)),
+                                instance_length: Some(length)
+                            }));
 
-                        fd.try_clone()?
-                            .read(range)
-                            .map(|fut| stream::once(Ok(chunk!(BOUNDARY_LINE)))
-                                .chain(stream::once(Ok(chunk!(format!("{}\r\n", headers)))))
-                                .chain(fut)
-                                .chain(stream::once(Ok(chunk!("\r\n"))))
-                            )
-                            .map_err(Into::into)
-                    })
-                    .flatten()
-                    .forward(send)
+                            let fd = file::File::new(fd, chunk_length, length);
+
+                            chain! {
+                                ( BOUNDARY_LINE ),
+                                ( format!("{}\r\n", headers) ),
+                                ( + fd.read(range) ),
+                                ( "\r\n" )
+                            }
+                        })
+                        .flatten()
+                        .forward(send)
+                    )
                     .map(drop)
                     .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
                 self.httpd.remote.spawn(done);
 
                 Ok(res
-                    .with_status(StatusCode::PartialContent)
-                    .with_headers(entity.headers(true))
+                   .with_status(StatusCode::PartialContent)
+                   .with_headers(entity.headers(true))
                 )
+
             }
         }
     }
 
     #[cfg(not(feature = "sendfile"))]
-    fn send(&self, fd: file::File, range: Option<Range<u64>>) -> io::Result<Response> {
-        let mut res = Response::new();
-
+    fn send(&self, entity: &Entity, len: u64, range: Option<Range<u64>>) -> io::Result<Response> {
         if self.req.method() == &Head {
-            res.set_body(Body::empty());
+            Ok(Response::new())
         } else {
-            let range = range.unwrap_or_else(|| 0..fd.length);
-
             let log = self.log.clone();
+            let range = range.unwrap_or_else(|| 0..len);
+            let chunk_length = self.httpd.chunk_length;
+            let mut res = Response::new();
             let (send, body) = Body::pair();
             res.set_body(body);
 
             debug!(self.log, "process"; "send" => "readchunk");
 
-            let done = fd.read(range)?
-                .forward(send)
+            let done = TokioFile::open(entity.path.to_owned())
+                .map_err(Into::into)
+                .map(move |fd| file::File::new(fd, chunk_length, len))
+                .and_then(|fd| fd.read(range).forward(send))
                 .map(drop)
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 
             self.httpd.remote.spawn(done);
-        }
 
-        Ok(res)
+            Ok(res)
+        }
     }
 
     #[cfg(feature = "sendfile")]
@@ -212,13 +211,13 @@ impl<'a> Process<'a> {
 
         if self.req.method() == &Head {
             res.set_body(Body::empty());
-        } else if let &Some(ref socket) = &self.httpd.socket {
+        } else if let Some(socket) = self.httpd.socket.clone() {
             let log = self.log.clone();
             res.set_body(Body::empty());
 
             debug!(self.log, "process"; "send" => "sendfile");
 
-            let done = fd.sendfile(range, socket.clone())?
+            let done = fd.sendfile(range, socket)?
                 .for_each(|_| future::ok(()))
                 .map_err(move |err| error!(log, "send"; "err" => format_args!("{}", err)));
 

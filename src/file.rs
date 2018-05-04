@@ -1,9 +1,12 @@
 use std::{ io, fs, cmp };
 use std::ops::Range;
 use std::path::Path;
-use futures::{ Stream, Poll, Async };
+use std::io::SeekFrom;
+use futures::{ Future, Stream, Poll, Async };
+use tokio_io::AsyncRead;
 use tokio_io::io::Window;
-use tokio::fs::file::{ File as TokioFile, OpenFuture };
+use tokio::fs::file::File as TokioFile;
+use bytes::BytesMut;
 use hyper;
 use ::error;
 
@@ -14,81 +17,81 @@ use ::error;
 
 
 pub struct File {
-    fd: fs::File,
+    fd: TokioFile,
     chunk_length: usize,
     pub length: u64
 }
 
 impl File {
     #[inline]
-    pub fn open<P>(path: P) -> OpenFuture<P>
-        where P: AsRef<Path> + Send + 'static
-    {
-        TokioFile::open(path)
+    pub fn new(fd: TokioFile, chunk_length: usize, length: u64) -> Self {
+        File { fd, chunk_length, length }
     }
 
-    #[inline]
-    pub fn new(fd: fs::File, chunk_length: usize, length: u64) -> io::Result<Self> {
-        Ok(File { fd, chunk_length, length })
-    }
-
-    #[inline]
-    pub fn try_clone(&self) -> io::Result<Self> {
-        Ok(File {
-            fd: self.fd.try_clone()?,
-            chunk_length: self.chunk_length,
-            length: self.length
-        })
-    }
-
-    pub fn read(self, range: Range<u64>) -> io::Result<ReadChunkFut> {
-        let buf = vec![0; cmp::min(self.chunk_length, self.length as _)];
-        Ok(ReadChunkFut { fd: self.fd, range, buf })
+    pub fn read(self, range: Range<u64>) -> ReadStream {
+        let take = range.end - range.start;
+        let buf = BytesMut::with_capacity(cmp::min(self.chunk_length, take as _));
+        ReadStream { fd: self.fd, range, buf }
     }
 
     #[cfg(feature = "sendfile")]
     #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
     pub fn sendfile(self, range: Range<u64>, socket: Arc<BiLock<TcpStream>>) -> io::Result<SendFileFut> {
+        unsafe fn as_fs_file(t: TokioFile) -> fs::File {
+            struct PubTokioFile {
+                std: Option<fs::File>
+            }
+
+            mem::transmute::<_, PubTokioFile>(t).std.unwrap()
+        }
+
         Ok(SendFileFut {
             socket,
-            fd: self.fd,
+            fd: unsafe { as_fs_file(self.fd) },
             offset: range.start as _,
             end: range.end as _
         })
     }
 }
 
-pub struct ReadChunkFut {
-    fd: fs::File,
-    range: Range<u64>,
-    buf: Vec<u8>
+#[inline]
+pub fn try_clone(fd: TokioFile) -> TryClone {
+    TryClone(fd)
 }
 
-impl Stream for ReadChunkFut {
+pub struct TryClone(TokioFile);
+
+impl Stream for TryClone {
+    type Item = TokioFile;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        let fd = try_ready!(self.0.poll_try_clone());
+        Ok(Async::Ready(Some(fd)))
+    }
+}
+
+pub struct ReadStream {
+    fd: TokioFile,
+    range: Range<u64>,
+    buf: BytesMut
+}
+
+impl Stream for ReadStream {
     type Item = hyper::Result<hyper::Chunk>;
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        #[cfg(unix)] use std::os::unix::fs::FileExt;
-        #[cfg(windows)] use std::os::windows::fs::FileExt;
-
-        let want_len = cmp::min((self.range.end - self.range.start) as _, self.buf.len());
+        let want_len = self.range.end - self.range.start;
 
         if want_len > 0 {
-            let mut window = Window::new(&mut self.buf[..]);
-            window.set_end(want_len);
-
-            #[cfg(unix)]
-            let read_len = self.fd.read_at(window.as_mut(), self.range.start)?;
-
-            #[cfg(windows)]
-            let read_len = self.fd.seek_read(window.as_mut(), self.range.start)?;
+            try_ready!(self.fd.poll_seek(SeekFrom::Start(self.range.start)));
+            let read_len = try_ready!(self.fd.read_buf(&mut self.buf));
 
             self.range.start += read_len as u64;
-            window.set_end(read_len);
-            let chunk = Vec::from(window.as_ref());
-            let chunk = hyper::Chunk::from(chunk);
-            Ok(Async::Ready(Some(Ok(chunk))))
+
+            let chunk = self.buf.take().freeze();
+            Ok(Async::Ready(Some(Ok(chunk.into()))))
         } else {
             Ok(Async::Ready(None))
         }

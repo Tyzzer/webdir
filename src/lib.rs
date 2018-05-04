@@ -7,7 +7,7 @@
 #[cfg(feature = "sendfile")] extern crate mio;
 extern crate tokio;
 extern crate tokio_io;
-extern crate futures;
+#[macro_use] extern crate futures;
 extern crate hyper;
 extern crate maud;
 extern crate percent_encoding;
@@ -19,6 +19,7 @@ extern crate mime_guess;
 extern crate siphasher;
 extern crate base64;
 extern crate smallvec;
+extern crate bytes;
 
 #[macro_use] mod utils;
 #[cfg(feature = "sendfile")] pub mod sendfile;

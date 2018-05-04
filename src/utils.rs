@@ -39,6 +39,22 @@ macro_rules! chunk {
 }
 
 
+macro_rules! chain {
+    ( @parse + $stream:expr ) => {
+        $stream
+    };
+    ( @parse $chunk:expr ) => {
+        ::tokio::prelude::stream::once(Ok(Ok(::hyper::Chunk::from($chunk))))
+    };
+    ( $( ( $( $stream:tt )* ) ),* ) => {
+        ::tokio::prelude::stream::empty()
+        $(
+            .chain(chain!(@parse $( $stream )*))
+        )*
+    };
+}
+
+
 pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {
     path.as_ref()
         .components()
