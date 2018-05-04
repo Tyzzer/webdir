@@ -30,8 +30,9 @@ impl File {
 
     pub fn read(self, range: Range<u64>) -> ReadStream {
         let take = range.end - range.start;
-        let buf = BytesMut::with_capacity(cmp::min(self.chunk_length, take as _));
-        ReadStream { fd: self.fd, range, buf }
+        let cap = cmp::min(self.chunk_length, take as _);
+        let buf = BytesMut::with_capacity(cap);
+        ReadStream { fd: self.fd, range, buf, cap }
     }
 
     #[cfg(feature = "sendfile")]
@@ -74,7 +75,8 @@ impl Stream for TryClone {
 pub struct ReadStream {
     fd: TokioFile,
     range: Range<u64>,
-    buf: BytesMut
+    buf: BytesMut,
+    cap: usize
 }
 
 impl Stream for ReadStream {
@@ -82,9 +84,11 @@ impl Stream for ReadStream {
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let want_len = self.range.end - self.range.start;
+        let want_len = cmp::min((self.range.end - self.range.start) as _, self.cap);
 
         if want_len > 0 {
+            self.buf.reserve(want_len);
+
             try_ready!(self.fd.poll_seek(SeekFrom::Start(self.range.start)));
             let read_len = try_ready!(self.fd.read_buf(&mut self.buf));
 
