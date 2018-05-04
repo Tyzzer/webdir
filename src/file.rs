@@ -6,7 +6,6 @@ use futures::{ Future, Stream, Poll, Async };
 use tokio_io::AsyncRead;
 use tokio_io::io::Window;
 use tokio::fs::file::File as TokioFile;
-use bytes::BytesMut;
 use hyper;
 use ::error;
 
@@ -30,9 +29,8 @@ impl File {
 
     pub fn read(self, range: Range<u64>) -> ReadStream {
         let take = range.end - range.start;
-        let cap = cmp::min(self.chunk_length, take as _);
-        let buf = BytesMut::with_capacity(cap);
-        ReadStream { fd: self.fd, range, buf, cap }
+        let buf = vec![0; cmp::min(self.chunk_length, take as _)];
+        ReadStream { fd: self.fd, range, buf }
     }
 
     #[cfg(feature = "sendfile")]
@@ -75,8 +73,7 @@ impl Stream for TryClone {
 pub struct ReadStream {
     fd: TokioFile,
     range: Range<u64>,
-    buf: BytesMut,
-    cap: usize
+    buf: Vec<u8>,
 }
 
 impl Stream for ReadStream {
@@ -84,17 +81,19 @@ impl Stream for ReadStream {
     type Error = error::Error;
 
     fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
-        let want_len = cmp::min((self.range.end - self.range.start) as _, self.cap);
+        let want_len = cmp::min((self.range.end - self.range.start) as _, self.buf.len());
 
         if want_len > 0 {
-            self.buf.reserve(want_len);
+            let mut window = Window::new(&mut self.buf[..]);
+            window.set_end(want_len);
 
             try_ready!(self.fd.poll_seek(SeekFrom::Start(self.range.start)));
-            let read_len = try_ready!(self.fd.read_buf(&mut self.buf));
+            let read_len = try_ready!(self.fd.poll_read(window.as_mut()));
 
             self.range.start += read_len as u64;
+            window.set_end(read_len);
 
-            let chunk = self.buf.take().freeze();
+            let chunk = Vec::from(window.as_ref());
             Ok(Async::Ready(Some(Ok(chunk.into()))))
         } else {
             Ok(Async::Ready(None))
@@ -110,6 +109,7 @@ mod test {
     use std::fs;
     use std::io::Write;
     use futures::{ Future, Stream };
+    use tokio::fs::File as TokioFile;
     use self::tempdir::TempDir;
     use super::*;
 
@@ -122,16 +122,15 @@ mod test {
                 .write_all(&[42; 1024]).unwrap();
         }
 
-        let fd = fs::File::open(tmp.path().join("test")).unwrap();
-        let len = fd.metadata().unwrap().len();
+        let done = TokioFile::open(tmp.path().join("test"))
+            .map_err(Into::into)
+            .and_then(|fd| File::new(fd, 1 << 8, 989).read(32..1021)
+                .map(|chunk| chunk.unwrap().to_vec())
+                .concat2()
+            )
+            .map(|output| assert_eq!(output, &[42; 989][..]))
+            .map_err(|err| panic!("{:?}", err));
 
-        let fd = File::new(fd, len as _, 1 << 16).unwrap();
-        let fut = fd.read(32..1021).unwrap()
-            .map(|chunk| chunk.unwrap().to_vec())
-            .concat2();
-
-        let output = fut.wait().unwrap();
-
-        assert_eq!(output, &[42; 989][..]);
+        ::tokio::run(done);
     }
 }

@@ -32,7 +32,6 @@ structopt = "0.2"
 structopt-derive = "0.2"
 failure = "0.1"
 
-bytes = "0.4"
 futures = "0.1"
 futures-cpupool = "0.1"
 mio = { version = "0.6", optional = true }
