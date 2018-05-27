@@ -19,6 +19,7 @@ extern crate mime_guess;
 extern crate siphasher;
 extern crate base64;
 extern crate smallvec;
+extern crate rand;
 
 #[macro_use] mod utils;
 #[cfg(feature = "sendfile")] pub mod sendfile;

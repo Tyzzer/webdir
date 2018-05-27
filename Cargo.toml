@@ -8,6 +8,7 @@ homepage = "https://github.com/Tyzzer/webdir"
 readme = "README.md"
 description = "A simple asynchronous static file server"
 build = "build.rs"
+autobins = false
 
 [[bin]]
 name = "webdir"
@@ -55,6 +56,7 @@ mime = "0.3"
 mime_guess = "2.0.0-alpha"
 maud = "0.17"
 if_chain = "0.1"
+rand = "0.5"
 
 slog = { version = "2.0", features = [ "release_max_level_debug" ] }
 slog-async = "2.0"

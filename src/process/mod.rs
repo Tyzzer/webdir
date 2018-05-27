@@ -11,6 +11,8 @@ use hyper::{ header, Request, Response, Head, Body, StatusCode };
 use mime_guess::guess_mime_type;
 use maud::Render;
 use slog::Logger;
+use rand::{ Rng, thread_rng };
+use rand::distributions::Alphanumeric;
 use ::utils::{ path_canonicalize, decode_path };
 use ::{ error, file, Httpd };
 use self::sortdir::{ SortDir, up };
@@ -111,10 +113,10 @@ impl<'a> Process<'a> {
         let entity = Entity::new(path, metadata, self.log);
 
         match entity.check(self.req.headers()) {
-            EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers(false))),
+            EntifyResult::Err(resp) => Ok(resp.with_headers(entity.headers())),
             EntifyResult::None => self.send(&entity, entity.length, None)
                 .map(|res| res
-                    .with_headers(entity.headers(false))
+                    .with_headers(entity.headers())
                     .with_header(header::ContentLength(entity.length))
                 ),
             EntifyResult::One(range) => {
@@ -123,7 +125,7 @@ impl<'a> Process<'a> {
                 self.send(&entity, entity.length, Some(range.clone()))
                     .map(|res| res
                          .with_status(StatusCode::PartialContent)
-                         .with_headers(entity.headers(false))
+                         .with_headers(entity.headers())
                          .with_header(header::ContentLength(range.end - range.start))
                          .with_header(header::ContentRange(header::ContentRangeSpec::Bytes {
                             range: Some((range.start, range.end - 1)), instance_length: Some(entity.length)
@@ -131,13 +133,16 @@ impl<'a> Process<'a> {
                     )
             },
             EntifyResult::Vec(ranges) => if self.req.method() == &Head {
+                let boundary = thread_rng()
+                    .sample_iter(&Alphanumeric)
+                    .take(12)
+                    .collect::<String>();
+
                 Ok(Response::new()
                    .with_status(StatusCode::PartialContent)
-                   .with_headers(entity.headers(true))
+                   .with_headers(entity.multipart_headers(&boundary))
                 )
             } else {
-                const BOUNDARY_LINE: &str = concat!("--", boundary!(), "\r\n");
-
                 debug!(self.log, "process"; "ranges" => format_args!("{:?}", ranges));
 
                 let log = self.log.clone();
@@ -146,6 +151,12 @@ impl<'a> Process<'a> {
                 let mut res = Response::new();
                 let (send, body) = Body::pair();
                 res.set_body(body);
+
+                let boundary = thread_rng()
+                    .sample_iter(&Alphanumeric)
+                    .take(12)
+                    .collect::<String>();
+                let boundary_line = format!("--{}\r\n", boundary);
 
                 let done = TokioFile::open(entity.path.to_owned())
                     .map_err(Into::into)
@@ -167,7 +178,7 @@ impl<'a> Process<'a> {
                                 type Item = _;
                                 type Error = _;
 
-                                ( BOUNDARY_LINE ),
+                                ( boundary_line.clone() ),
                                 ( format!("{}\r\n", headers) ),
                                 ( + fd.read(range) ),
                                 ( "\r\n" )
@@ -183,9 +194,8 @@ impl<'a> Process<'a> {
 
                 Ok(res
                    .with_status(StatusCode::PartialContent)
-                   .with_headers(entity.headers(true))
+                   .with_headers(entity.multipart_headers(&boundary))
                 )
-
             }
         }
     }

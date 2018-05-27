@@ -10,7 +10,7 @@ use smallvec::SmallVec;
 use mime_guess::guess_mime_type;
 use siphasher::sip::SipHasher;
 use base64::{ URL_SAFE_NO_PAD, encode_config };
-use ::response::{ BOUNDARY, fail, not_modified };
+use ::response::{ fail, not_modified };
 use ::utils::u64_to_bytes;
 
 
@@ -65,19 +65,29 @@ impl<'a, 'b> Entity<'a, 'b> {
         ))
     }
 
-    pub fn headers(&self, is_multipart: bool) -> Headers {
+    pub fn headers(&self) -> Headers {
+        let mut headers = Headers::new();
+
+        headers.set(header::AcceptRanges(vec!(header::RangeUnit::Bytes)));
+        headers.set(header::ETag(self.etag.clone()));
+        headers.set(header::ContentType(guess_mime_type(&*self.path)));
+
+        if let Ok(date) = self.metadata.modified() {
+            headers.set(header::LastModified(header::HttpDate::from(date)));
+        }
+
+        headers
+    }
+
+    pub fn multipart_headers(&self, boundary: &str) -> Headers {
         let mut headers = Headers::new();
 
         headers.set(header::AcceptRanges(vec!(header::RangeUnit::Bytes)));
         headers.set(header::ETag(self.etag.clone()));
 
-        if is_multipart {
-            // TODO https://github.com/hyperium/mime/issues/52
-            let mime = format!("multipart/byteranges; boundary={}", BOUNDARY).parse().unwrap();
-            headers.set(header::ContentType(mime));
-        } else {
-            headers.set(header::ContentType(guess_mime_type(&*self.path)));
-        }
+        // TODO https://github.com/hyperium/mime/issues/52
+        let mime = format!("multipart/byteranges; boundary={}", boundary).parse().unwrap();
+        headers.set(header::ContentType(mime));
 
         if let Ok(date) = self.metadata.modified() {
             headers.set(header::LastModified(header::HttpDate::from(date)));

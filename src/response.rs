@@ -4,8 +4,6 @@ use slog::Logger;
 use maud::html;
 
 
-pub const BOUNDARY: &str = boundary!();
-
 #[inline]
 pub fn fail(log: &Logger, nobody: bool, status: StatusCode, err: &io::Error) -> Response {
     debug!(log, "fail"; "err" => format_args!("{}", err));

@@ -23,7 +23,6 @@ pub fn load_certs(path: &Path) -> io::Result<Vec<Certificate>> {
 }
 
 #[cfg(feature = "tls")]
-#[cfg_attr(feature = "cargo-clippy", allow(or_fun_call))]
 #[inline]
 pub fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
     let fd = File::open(path)?;
@@ -32,7 +31,7 @@ pub fn load_keys(path: &Path) -> io::Result<Vec<PrivateKey>> {
         .ok()
         .filter(|keys| !keys.is_empty())
         .or_else(|| pkcs8_private_keys(&mut BufReader::new(fd)).ok())
-        .ok_or(err!(Other, "Not found keys"))
+        .ok_or_else(|| err!(Other, "Not found keys"))
 }
 
 #[cfg(unix)]
