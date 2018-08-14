@@ -15,8 +15,8 @@ pub fn fail(log: &Logger, nobody: bool, status: StatusCode, err: &io::Error) -> 
     if nobody {
         res.set_body({
             html!{
-                h1 strong "( ・_・)"
-                h2 (err)
+                h1 { strong { "( ・_・)" } }
+                h2 { (err) }
             }
         }.into_string());
     }

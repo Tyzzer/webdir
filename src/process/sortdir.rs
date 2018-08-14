@@ -140,21 +140,28 @@ impl Render for Entry {
     fn render(&self) -> Markup {
         html!{
             tr {
-                td class="icon" (self.ty)
+                td class="icon" { (self.ty) }
 
-                td class="link"
-                    a href=(self.path()) (self.name.to_string_lossy())
-
-                td class="time" small @if let Ok(time) = self.time() {
-                    (time.format("%F %T UTC"))
-                } @else {
-                    "-"
+                td class="link" {
+                    a href=(self.path()) { (self.name.to_string_lossy()) }
                 }
 
-                td class="size" @if let EntryType::File = self.ty {
-                    (self.size())
-                } @else {
-                    "-"
+                td class="time" {
+                    small {
+                        @if let Ok(time) = self.time() {
+                            (time.format("%F %T UTC"))
+                        } @else {
+                            "-"
+                        }
+                    }
+                }
+
+                td class="size" {
+                    @if let EntryType::File = self.ty {
+                        (self.size())
+                    } @else {
+                        "-"
+                    }
                 }
             }
         }
@@ -165,8 +172,10 @@ impl Render for Entry {
 pub fn up(top: bool) -> Markup {
     html!{
         tr {
-            td  class="icon"    "⤴️"
-            td  class="link"    @if !top { a href=".." ".." }
+            td  class="icon" { "⤴️" }
+            td  class="link" {
+                @if !top { a href=".." { ".." } }
+            }
         }
     }
 }

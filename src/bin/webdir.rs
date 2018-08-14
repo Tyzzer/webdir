@@ -1,5 +1,5 @@
 #![cfg_attr(feature = "sysalloc", feature(alloc_system, global_allocator, allocator_api))]
-#![feature(attr_literals, ip_constructors, option_filter)]
+#![feature(attr_literals)]
 
 #[cfg(feature = "sysalloc")] extern crate alloc_system;
 #[cfg(unix)] extern crate xdg;
@@ -8,6 +8,7 @@ extern crate slog_term;
 extern crate slog_async;
 #[macro_use] extern crate structopt;
 #[macro_use] extern crate serde_derive;
+extern crate failure;
 extern crate toml;
 extern crate futures;
 extern crate tokio;
@@ -18,13 +19,14 @@ extern crate hyper;
 
 mod utils;
 
-use std::{ env, io };
+use std::env;
 use std::fs::File;
 use std::io::Read;
 use std::sync::Arc;
-use std::net::{ SocketAddr, IpAddr, Ipv4Addr };
+use std::net::SocketAddr;
 use std::path::{ Path, PathBuf };
 use structopt::StructOpt;
+use failure::Fallible;
 use futures::{ Future, Stream };
 use tokio::net::TcpListener;
 use tokio::runtime::Runtime;
@@ -115,7 +117,7 @@ pub struct Config {
 
 
 #[inline]
-fn make_config() -> io::Result<Config> {
+fn make_config() -> Fallible<Config> {
     let mut args_config = Config::from_args();
 
     let maybe_config_path = args_config.config.as_ref()
@@ -171,14 +173,14 @@ fn make_config() -> io::Result<Config> {
 
 #[cfg_attr(not(feature = "tls"), allow(unused_variables, unused_mut))]
 #[inline]
-fn start(mut config: Config) -> io::Result<()> {
+fn start(mut config: Config) -> Fallible<()> {
     let log = init_logging(&config)?;
 
     #[cfg(feature = "tls")]
     let maybe_tls_config = if let (Some(cert), Some(key)) = (config.cert.take(), config.key.take()) {
         let mut tls_config = ServerConfig::new(NoClientAuth::new());
         tls_config.ticketer = Ticketer::new();
-        tls_config.set_single_cert(load_certs(&cert)?, load_keys(&key)?.remove(0));
+        tls_config.set_single_cert(load_certs(&cert)?, load_keys(&key)?.remove(0))?;
         Some(Arc::new(tls_config))
     } else {
         None
@@ -190,7 +192,7 @@ fn start(mut config: Config) -> io::Result<()> {
     let root =
         if let Some(ref p) = config.root { Arc::new(Path::new(p).canonicalize()?) }
         else { Arc::new(env::current_dir()?) };
-    let addr = config.addr.unwrap_or_else(|| SocketAddr::new(IpAddr::V4(Ipv4Addr::localhost()), 0));
+    let addr = config.addr.unwrap_or_else(|| ([127, 0, 0, 1], 0).into());
     let index = config.index;
     let keepalive = config.keepalive.unwrap_or(true);
     let chunk_length = config.chunk_length.unwrap_or(1 << 16);

@@ -1,4 +1,5 @@
-#![feature(proc_macro, proc_macro_non_items)]
+#![feature(proc_macro_non_items)]
+#![feature(use_extern_macros)]
 
 #[macro_use] extern crate failure;
 #[macro_use] extern crate slog;
