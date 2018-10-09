@@ -19,7 +19,7 @@ pub enum InnerAccept<IO, Fut> {
 }
 
 impl<IO> Stream<IO>
-where IO: AsyncRead + AsyncWrite + AsRawFd + 'static
+where IO: AsyncRead + AsyncWrite + AsRawFd
 {
     pub fn new(io: IO, accept: Option<TlsAcceptor>)
         -> InnerAccept<IO, impl Future<Item=Stream<IO>, Error=io::Error>>

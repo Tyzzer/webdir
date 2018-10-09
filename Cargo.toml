@@ -9,6 +9,11 @@ homepage = "https://github.com/Tyzzer/webdir"
 readme = "README.md"
 description = "A simple asynchronous static file server"
 
+[[bin]]
+name = "webdir"
+path = "src/bin/webdir.rs"
+doc = false
+
 [features]
 
 [dependencies]
