@@ -22,7 +22,7 @@ impl<IO> Stream<IO>
 where IO: AsyncRead + AsyncWrite + AsRawFd
 {
     pub fn new(io: IO, accept: Option<TlsAcceptor>)
-        -> InnerAccept<IO, impl Future<Item=Stream<IO>, Error=io::Error>>
+        -> InnerAccept<IO, impl Future<Item=Self, Error=io::Error>>
     {
         if let Some(acceptor) = accept {
             let fut = acceptor.accept(io)
@@ -41,6 +41,13 @@ where IO: AsyncRead + AsyncWrite + AsRawFd
             InnerAccept::Fut(fut)
         } else {
             InnerAccept::Socket(Some(io))
+        }
+    }
+
+    pub fn is_sendable(&self) -> bool {
+        match self {
+            Stream::Socket(_) | Stream::Ktls(_) => true,
+            _ => false
         }
     }
 }

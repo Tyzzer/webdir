@@ -66,11 +66,16 @@ fn main() -> Fallible<()> {
             .ok_or_else(|| failure::err_msg("not found keys"))?;
 
         let mut config = ServerConfig::new(NoClientAuth::new());
-        config.ticketer = Ticketer::new();
         config.set_single_cert(certs, key)?;
-//        config.ciphersuites.clear();
-//        config.ciphersuites.push(rustls::ALL_CIPHERSUITES[6]);
-//        config.ciphersuites.push(rustls::ALL_CIPHERSUITES[8]);
+        config.ticketer = Ticketer::new();
+
+        // ktls first
+        config.ignore_client_order = true;
+        let cipher = config.ciphersuites.remove(6);
+        config.ciphersuites.insert(0, cipher);
+        let cipher = config.ciphersuites.remove(8);
+        config.ciphersuites.insert(1, cipher);
+
         let config = Arc::new(config);
 
         // TODO

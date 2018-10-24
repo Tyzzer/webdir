@@ -1,4 +1,4 @@
-#![feature(read_initializer)]
+#![feature(read_initializer, never_type)]
 
 pub mod common;
 pub mod stream;
@@ -27,7 +27,7 @@ impl Service for WebDir {
     type Future = future::FutureResult<Response<Self::ResBody>, Self::Error>;
 
     fn call(&mut self, req: Request<Self::ReqBody>) -> Self::Future {
-        match Process::new(self, &req).process() {
+        match Process::new(self, req).process() {
             Ok(resp) => future::ok(resp),
             Err(err) => {
                 let resp = Response::new(Body::from("err"));
