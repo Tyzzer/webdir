@@ -1,16 +1,17 @@
-use std::cmp;
+use std::{ fmt, cmp };
 use std::ops::{ Bound, Range };
 use std::path::Path;
 use std::fs::Metadata;
 use std::str::FromStr;
 use smallvec::SmallVec;
 use rand::{ Rng, thread_rng, distributions::Alphanumeric };
-use hyper::StatusCode;
+use hyper::{ StatusCode, Body };
 use headers_core::HeaderMapExt;
 use headers_core::header::HeaderMap;
 use headers_ext as header;
 use mime::Mime;
 use mime_guess::guess_mime_type;
+use crate::common::err_html;
 
 
 pub struct Entity<'a> {
@@ -22,10 +23,10 @@ pub struct Entity<'a> {
 pub struct Result(pub StatusCode, pub HeaderMap, pub Value);
 
 pub enum Value {
-    Err(failure::Error),
+    Error(Body),
     None,
-    One(Range<u64>),
-    Vec(String, Vec<Range<u64>>)
+    Range(Range<u64>),
+    Multipart(String, Vec<Range<u64>>)
 }
 
 impl<'a> Entity<'a> {
@@ -68,6 +69,14 @@ impl<'a> Entity<'a> {
     pub fn result(&self, map: &HeaderMap) -> Result {
         // TODO check etag
 
+        if let Some(time) = map.typed_get::<header::IfModifiedSince>() {
+            if let Ok(time2) = self.metadata.modified() {
+                if !time.is_modified(time2) {
+                    return not_modified(format_args!("{:?} vs {:?}", time, time2));
+                }
+            }
+        }
+
         if let Some(ranges) = map.typed_get::<header::Range>() {
             let length = self.length;
 
@@ -100,24 +109,21 @@ impl<'a> Entity<'a> {
                 Result(
                     StatusCode::RANGE_NOT_SATISFIABLE,
                     map,
-                    Value::Err(failure::err_msg("Bad Range"))
+                    Value::Error(Body::from("Bad Range"))
                 )
             } else if vec.len() == 1 {
                 let mut map = self.headers();
                 let range = &vec[0];
                 map.typed_insert(header::ContentLength(range.end - range.start));
                 map.typed_insert(header::ContentRange::bytes(range.start, range.end - 1, length));
-                Result(StatusCode::PARTIAL_CONTENT, map, Value::One(vec.pop().unwrap()))
+                Result(StatusCode::PARTIAL_CONTENT, map, Value::Range(vec.pop().unwrap()))
             } else {
                 let boundary = thread_rng()
                     .sample_iter(&Alphanumeric)
                     .take(12)
                     .collect::<String>();
-                let mut map = self.multipart_headers(&boundary);
-
-                // TODO
-
-                Result(StatusCode::PARTIAL_CONTENT, map, Value::Vec(boundary, vec.into_vec()))
+                let map = self.multipart_headers(&boundary);
+                Result(StatusCode::PARTIAL_CONTENT, map, Value::Multipart(boundary, vec.into_vec()))
             }
         } else {
             let mut map = self.headers();
@@ -125,4 +131,11 @@ impl<'a> Entity<'a> {
             Result(StatusCode::OK, map, Value::None)
         }
     }
+}
+
+
+pub fn not_modified(display: fmt::Arguments) -> Result {
+    let map = HeaderMap::new();
+    let body = err_html(format_args!("Not Modified: {}", display)).into_string();
+    Result(StatusCode::NOT_MODIFIED, map, Value::Error(Body::from(body)))
 }

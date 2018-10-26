@@ -1,4 +1,4 @@
-#![feature(read_initializer, never_type)]
+#![feature(read_initializer, never_type, proc_macro_hygiene)]
 
 #[macro_use]
 pub mod common;
@@ -6,13 +6,14 @@ pub mod stream;
 pub mod file;
 mod process;
 
-use std::fs;
+use std::{ io, fs };
 use std::sync::Arc;
 use std::path::PathBuf;
 use tokio::prelude::*;
 use hyper::service::Service;
-use hyper::{ Method, Request, Response, Body };
+use hyper::{ StatusCode, Method, Request, Response, Body };
 use crate::process::Process;
+use crate::common::err_html;
 
 
 #[derive(Clone)]
@@ -31,7 +32,15 @@ impl Service for WebDir {
         match Process::new(self, req).process() {
             Ok(resp) => future::ok(resp),
             Err(err) => {
-                let resp = Response::new(Body::from("err"));
+                let body = err_html(format_args!("{:?}", err)).into_string();
+                let mut resp = Response::new(Body::from(body));
+
+                match err.kind() {
+                    io::ErrorKind::NotFound => *resp.status_mut() =  StatusCode::NOT_FOUND,
+                    io::ErrorKind::PermissionDenied => *resp.status_mut() =  StatusCode::FORBIDDEN,
+                    _ => *resp.status_mut() =  StatusCode::INTERNAL_SERVER_ERROR
+                }
+
                 future::ok(resp)
             }
         }

@@ -45,7 +45,7 @@ siphasher = "0.2"
 smallvec = "0.6"
 mime = "0.3"
 mime_guess = "2.0.0-alpha"
-# maud = "0.18"
+maud = "0.19"
 if_chain = "0.1"
 rand = "0.5"
 
