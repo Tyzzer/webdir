@@ -20,17 +20,19 @@ doc = false
 serde = "1.0"
 structopt = "0.2"
 failure = "0.1"
+log = "0.3"
 
 bytes = "*"
 tokio = "0.1"
 tokio-io = "0.1"
 hyper = "0.12"
+headers-core = "0.0.1"
+headers-ext = "0.0.3"
 
 rustls = { version = "0.14" }
 tokio-rustls = { version = "0.8.0", features = ["nightly"] }
 ktls = { git = "https://github.com/quininer/ktls" }
 tokio-rusktls = { git = "https://github.com/quininer/ktls" }
-tokio-linux-zio = { git = "https://github.com/quininer/tokio-linux-zio" }
 tokio-linux-aio = "*"
 
 percent-encoding = "1.0"

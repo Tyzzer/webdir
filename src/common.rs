@@ -5,7 +5,28 @@ use std::path::{ Path, PathBuf, Component };
 use percent_encoding::{ DEFAULT_ENCODE_SET, percent_encode, percent_decode };
 
 
-pub fn err(e: hyper::Error) -> io::Error {
+
+
+macro_rules! chain {
+    ( @parse + $stream:expr ) => {
+        $stream
+    };
+    ( @parse $chunk:expr ) => {
+        tokio::prelude::stream::once(Ok(hyper::Chunk::from($chunk)))
+    };
+    (
+        type Item = $item:ty;
+        type Error = $err:ty;
+        $( ( $( $stream:tt )* ) ),*
+    ) => {
+        tokio::prelude::stream::empty::<$item, $err>()
+        $(
+            .chain(chain!(@parse $( $stream )*))
+        )*
+    };
+}
+
+pub fn econv(e: hyper::Error) -> io::Error {
     io::Error::new(
         if e.is_parse() {
             io::ErrorKind::InvalidData

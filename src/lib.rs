@@ -1,5 +1,6 @@
 #![feature(read_initializer, never_type)]
 
+#[macro_use]
 pub mod common;
 pub mod stream;
 pub mod file;

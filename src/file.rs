@@ -9,9 +9,8 @@ use tokio::net::TcpStream;
 use tokio_io::io::Window;
 use hyper::body::{ Sender, Body };
 use hyper::upgrade::Upgraded;
-use tokio_linux_zio as zio;
 use crate::stream::Stream as WebStream;
-use crate::common::err;
+use crate::common::econv;
 
 const CHUNK_LENGTH: usize = 1 << 16;
 
@@ -24,17 +23,33 @@ macro_rules! try_ready {
 }
 
 
-pub struct ChunkStream {
+pub struct TryClone(pub tfs::File);
+
+impl Stream for TryClone {
+    type Item = tfs::File;
+    type Error = io::Error;
+
+    fn poll(&mut self) -> Poll<Option<Self::Item>, Self::Error> {
+        let fd = try_ready!(self.0.poll_try_clone());
+        Ok(Async::Ready(Some(fd)))
+    }
+}
+
+pub struct ChunkReader {
     fd: tfs::File,
     range: Range<u64>,
     buf: Vec<u8>
 }
 
-pub struct SenderSink {
-    sender: Sender
+impl ChunkReader {
+    pub fn new(fd: tfs::File, range: Range<u64>) -> Self {
+        ChunkReader { fd, range, buf: vec![0; CHUNK_LENGTH] }
+    }
 }
 
-impl Stream for ChunkStream {
+pub struct SenderSink(pub Sender);
+
+impl Stream for ChunkReader {
     type Item = hyper::Chunk;
     type Error = io::Error;
 
@@ -64,13 +79,13 @@ impl Sink for SenderSink {
     type SinkError = io::Error;
 
     fn start_send(&mut self, item: Self::SinkItem) -> Result<AsyncSink<Self::SinkItem>, Self::SinkError> {
-        match self.sender.poll_ready() {
+        match self.0.poll_ready() {
             Ok(Async::Ready(())) => (),
             Ok(Async::NotReady) => return Ok(AsyncSink::NotReady(item)),
-            Err(e) => return Err(err(e))
+            Err(e) => return Err(econv(e))
         }
 
-        match self.sender.send_data(item) {
+        match self.0.send_data(item) {
             Ok(()) => Ok(AsyncSink::Ready),
             Err(item) => Ok(AsyncSink::NotReady(item)),
         }
