@@ -12,6 +12,7 @@ use std::path::PathBuf;
 use tokio::prelude::*;
 use hyper::service::Service;
 use hyper::{ StatusCode, Method, Request, Response, Body };
+use log::{ log, info, debug };
 use crate::process::Process;
 use crate::common::err_html;
 
@@ -25,10 +26,13 @@ pub struct WebDir {
 impl Service for WebDir {
     type ReqBody = Body;
     type ResBody = Body;
-    type Error = hyper::Error;
+    type Error = !;
     type Future = future::FutureResult<Response<Self::ResBody>, Self::Error>;
 
     fn call(&mut self, req: Request<Self::ReqBody>) -> Self::Future {
+        info!("request: {} {}", req.method(), req.uri().path());
+        debug!("request: {:?}", req.headers());
+
         match Process::new(self, req).process() {
             Ok(resp) => future::ok(resp),
             Err(err) => {

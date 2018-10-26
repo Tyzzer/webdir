@@ -1,5 +1,3 @@
-#![feature(never_type)]
-
 use std::{ fs, env };
 use std::io::Cursor;
 use std::sync::Arc;
@@ -12,6 +10,8 @@ use tokio::prelude::*;
 use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use hyper::server::conn::Http;
+use slog::{ slog_o, Drain };
+use log::{ log, info, error };
 use webdir::{ WebDir, stream::Stream as WebStream };
 
 
@@ -56,6 +56,22 @@ fn load_cert_and_key(path: &Path) -> Fallible<(Vec<Certificate>, Vec<PrivateKey>
 fn main() -> Fallible<()> {
     let options = Options::from_args();
 
+    let level = env::var("WEBDIR_LOG")
+        .as_ref()
+        .map(String::as_str)
+        .unwrap_or("INFO")
+        .parse()
+        .map_err(|_| failure::err_msg("bad log level"))?;
+
+    let decorator = slog_term::TermDecorator::new().build();
+    let drain = slog_term::CompactFormat::new(decorator).build().fuse();
+    let drain = slog::LevelFilter::new(drain, level).fuse();
+    let drain = slog_async::Async::new(drain).build().fuse();
+    let logger = slog::Logger::root(drain, slog_o!("version" => env!("CARGO_PKG_VERSION")));
+
+    let _scope_guard = slog_scope::set_global_logger(logger);
+    let _log_guard = slog_stdlog::init()?;
+
     let root =
         if let Some(ref p) = options.root { Arc::new(p.canonicalize()?) }
         else { Arc::new(env::current_dir()?) };
@@ -87,12 +103,14 @@ fn main() -> Fallible<()> {
 
     let listener = TcpListener::bind(&options.addr)?;
 
-    println!("bind: {:?}", listener.local_addr());
+    info!("bind: {:?}", listener.local_addr());
 
     let webdir = WebDir { root, index: options.index };
 
     let done = listener.incoming().for_each(move |socket| {
         let webdir = webdir.clone();
+
+        info!("addr: {:?}", socket.peer_addr());
 
         let fut = WebStream::new(socket, acceptor.clone())
             .map_err(failure::Error::from)
@@ -101,12 +119,12 @@ fn main() -> Fallible<()> {
                 .map_err(Into::into)
             )
             .map(drop)
-            .map_err(|err| eprintln!("err: {:?}", err));
+            .map_err(|err| error!("http/err: {:?}", err));
 
         hyper::rt::spawn(fut);
         Ok(())
     })
-        .map_err(|err| eprintln!("err: {:?}", err));
+        .map_err(|err| error!("socket/err: {:?}", err));
 
     hyper::rt::run(done);
     Ok(())

@@ -5,11 +5,11 @@ use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::fs::{ self, Metadata, ReadDir };
-use log::{ log, error };
+use log::{ log, error, debug };
 use tokio::prelude::*;
 use tokio::fs as tfs;
 use tokio::net::TcpStream;
-use hyper::{ Request, Response, Body, StatusCode };
+use hyper::{ Request, Response, Method, Body, StatusCode };
 use headers_core::HeaderMapExt;
 use headers_core::header::HeaderMap;
 use headers_ext as header;
@@ -69,6 +69,8 @@ impl<'a> Process<'a> {
         let (sender, body) = Body::channel();
         let sink = SenderSink(sender);
 
+        debug!("send/dir: {}", is_top);
+
         let stream = chain! {
             type Item = _;
             type Error = io::Error;
@@ -102,29 +104,25 @@ impl<'a> Process<'a> {
     fn process_file(self, path: PathBuf, metadata: Metadata) -> Response<Body> {
         let entity = Entity::new(&path, &metadata);
 
-        match entity.result(self.req.headers()) {
-            entity::Result(status, mut map, entity::Value::Error(err)) => {
-                let mut resp = Response::new(err);
+        let entity::Result(status, mut map, value) = entity.result(self.req.headers());
+        let mut resp = match value {
+            entity::Value::Error(err) => {
                 map.typed_insert(html_utf8());
-                *resp.status_mut() = status;
-                *resp.headers_mut() = map;
-                resp
+                Response::new(err)
             },
-            entity::Result(status, map, entity::Value::None) => {
+            entity::Value::None => {
                 let body = self.sendchunk(&entity, None);
-                let mut resp = Response::new(body);
-                *resp.status_mut() = status;
-                *resp.headers_mut() = map;
-                resp
+                Response::new(body)
             },
-            entity::Result(status, map, entity::Value::Range(range)) => {
-                let body = self.sendchunk(&entity, Some(range.clone()));
-                let mut resp = Response::new(body);
-                *resp.status_mut() = status;
-                *resp.headers_mut() = map;
-                resp
+            entity::Value::Range(range) => {
+                let body = self.sendchunk(&entity, Some(range));
+                Response::new(body)
             },
-            entity::Result(status, map, entity::Value::Multipart(boundary, ranges)) => {
+            entity::Value::Multipart(boundary, ranges) => {
+                if Method::HEAD == self.req.method() {
+                    return Response::new(Body::empty());
+                }
+
                 let mime_type = guess_mime_type(entity.path);
                 let boundary1 = format!("--{}\r\n", boundary);
                 let boundary2 = format!("--{}--", boundary);
@@ -154,6 +152,8 @@ impl<'a> Process<'a> {
                             }
                             headers.extend_from_slice(b"\r\n");
 
+                            debug!("send/multipart: {:?}", range);
+
                             chain!{
                                 type Item = _;
                                 type Error = _;
@@ -171,15 +171,22 @@ impl<'a> Process<'a> {
 
                 hyper::rt::spawn(done);
 
-                let mut resp = Response::new(body);
-                *resp.status_mut() = status;
-                *resp.headers_mut() = map;
-                resp
+                Response::new(body)
             }
-        }
+        };
+
+        *resp.status_mut() = status;
+        *resp.headers_mut() = map;
+        resp
     }
 
     pub fn sendchunk(&self, entity: &Entity, range: Option<Range<u64>>) -> Body {
+        if Method::HEAD == self.req.method() {
+            return Body::empty();
+        }
+
+        debug!("send/chunk: {:?}", range);
+
         let range = range.unwrap_or(0..entity.length);
         let (sender, body) = Body::channel();
         let sink = SenderSink(sender);

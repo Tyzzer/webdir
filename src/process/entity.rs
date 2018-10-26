@@ -5,6 +5,7 @@ use std::fs::Metadata;
 use std::str::FromStr;
 use smallvec::SmallVec;
 use rand::{ Rng, thread_rng, distributions::Alphanumeric };
+use log::{ log, info, debug };
 use hyper::{ StatusCode, Body };
 use headers_core::HeaderMapExt;
 use headers_core::header::HeaderMap;
@@ -135,6 +136,8 @@ impl<'a> Entity<'a> {
 
 
 pub fn not_modified(display: fmt::Arguments) -> Result {
+    debug!("send/cache: {}", display);
+
     let map = HeaderMap::new();
     let body = err_html(format_args!("Not Modified: {}", display)).into_string();
     Result(StatusCode::NOT_MODIFIED, map, Value::Error(Body::from(body)))
