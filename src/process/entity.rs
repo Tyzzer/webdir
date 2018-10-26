@@ -5,7 +5,7 @@ use std::fs::Metadata;
 use std::str::FromStr;
 use smallvec::SmallVec;
 use rand::{ Rng, thread_rng, distributions::Alphanumeric };
-use log::{ log, info, debug };
+use log::{ log, debug };
 use hyper::{ StatusCode, Body };
 use headers_core::HeaderMapExt;
 use headers_core::header::HeaderMap;

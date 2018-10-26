@@ -21,13 +21,13 @@ serde = "1.0"
 structopt = "0.2"
 failure = "0.1"
 log = "0.3"
-slog = "*"
-slog-stdlog = "*"
-slog-scope = "*"
-slog-term = "*"
-slog-async = "*"
+slog = "2"
+slog-stdlog = "3.0.4-pre"
+slog-scope = "4"
+slog-term = "2"
+slog-async = "2"
 
-bytes = "*"
+bytes = "0.4"
 tokio = "0.1"
 tokio-io = "0.1"
 hyper = "0.12"
@@ -38,7 +38,7 @@ rustls = { version = "0.14" }
 tokio-rustls = { version = "0.8.0", features = ["nightly"] }
 ktls = { git = "https://github.com/quininer/ktls" }
 tokio-rusktls = { git = "https://github.com/quininer/ktls" }
-tokio-linux-aio = "*"
+tokio-linux-aio = "0.1"
 
 percent-encoding = "1.0"
 chrono = "0.4"

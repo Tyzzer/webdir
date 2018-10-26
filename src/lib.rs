@@ -6,12 +6,12 @@ pub mod stream;
 pub mod file;
 mod process;
 
-use std::{ io, fs };
+use std::io;
 use std::sync::Arc;
 use std::path::PathBuf;
 use tokio::prelude::*;
 use hyper::service::Service;
-use hyper::{ StatusCode, Method, Request, Response, Body };
+use hyper::{ StatusCode, Request, Response, Body };
 use log::{ log, info, debug };
 use crate::process::Process;
 use crate::common::err_html;

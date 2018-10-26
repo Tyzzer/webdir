@@ -1,15 +1,10 @@
-use std::{ fs, mem, cmp };
+use std::cmp;
 use std::io::{ self, SeekFrom };
-use std::collections::VecDeque;
 use std::ops::Range;
-use failure::Fallible;
 use tokio::prelude::*;
 use tokio::fs as tfs;
-use tokio::net::TcpStream;
 use tokio_io::io::Window;
-use hyper::body::{ Sender, Body };
-use hyper::upgrade::Upgraded;
-use crate::stream::Stream as WebStream;
+use hyper::body::Sender;
 use crate::common::econv;
 
 const CHUNK_LENGTH: usize = 1 << 16;
