@@ -4,8 +4,10 @@
 mod common;
 mod stream;
 mod file;
-mod aio;
 mod process;
+
+#[cfg(target_os = "linux")]
+mod aio;
 
 use std::io;
 use std::sync::Arc;
@@ -14,10 +16,8 @@ use tokio::prelude::*;
 use hyper::service::Service;
 use hyper::{ StatusCode, Request, Response, Body };
 use log::{ log, info, debug };
-use tokio_linux_aio::AioContext;
 use crate::process::Process;
 use crate::common::err_html;
-use crate::aio::HyperExecutor;
 pub use crate::stream::Stream as WebStream;
 
 
@@ -25,11 +25,22 @@ pub use crate::stream::Stream as WebStream;
 pub struct WebDir {
     pub root: Arc<PathBuf>,
     pub index: bool,
-    context: AioContext
+
+    #[cfg(target_os = "linux")]
+    context: tokio_linux_aio::AioContext
 }
 
 impl WebDir {
+    #[cfg(not(target_os = "linux"))]
     pub fn new(root: Arc<PathBuf>, index: bool) -> io::Result<Self> {
+        Ok(WebDir { root, index })
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn new(root: Arc<PathBuf>, index: bool) -> io::Result<Self> {
+        use tokio_linux_aio::AioContext;
+        use crate::aio::HyperExecutor;
+
         static EXECUTOR: &'static HyperExecutor = &HyperExecutor;
 
         let context = AioContext::new(EXECUTOR, 10)?;

@@ -1,15 +1,21 @@
 use std::io::{ self, Initializer };
-use std::os::unix::io::{ AsRawFd, RawFd };
 use bytes::{ Buf, BufMut };
 use rustls::ServerSession;
 use tokio::prelude::*;
 use tokio_rustls::{ TlsAcceptor, TlsStream };
+
+#[cfg(unix)]
+use std::os::unix::io::{ AsRawFd, RawFd };
+
+#[cfg(target_os = "linux")]
 use tokio_rusktls::KtlsStream;
 
 
 pub enum Stream<IO> {
     Socket(IO),
     Tls(TlsStream<IO, ServerSession>),
+
+    #[cfg(target_os = "linux")]
     Ktls(KtlsStream<IO>)
 }
 
@@ -19,12 +25,16 @@ pub enum InnerAccept<IO, Fut> {
 }
 
 impl<IO> Stream<IO>
-where IO: AsyncRead + AsyncWrite + AsRawFd
+where IO: private::AsyncIO
 {
     pub fn new(io: IO, accept: Option<TlsAcceptor>)
         -> InnerAccept<IO, impl Future<Item=Self, Error=io::Error>>
     {
         if let Some(acceptor) = accept {
+            #[cfg(not(target_os = "linux"))]
+            let fut = acceptor.accept(io).map(Stream::Tls);
+
+            #[cfg(target_os = "linux")]
             let fut = acceptor.accept(io)
                 .and_then(|stream| {
                     let (io, session) = stream.into_inner();
@@ -46,7 +56,8 @@ where IO: AsyncRead + AsyncWrite + AsRawFd
 
     pub fn is_sendable(&self) -> bool {
         match self {
-            Stream::Socket(_) | Stream::Ktls(_) => true,
+            Stream::Socket(_) => true,
+            #[cfg(target_os = "linux")] Stream::Ktls(_) => true,
             _ => false
         }
     }
@@ -70,12 +81,13 @@ where Fut: Future<Item=Stream<IO>, Error=io::Error>
 }
 
 impl<IO> io::Read for Stream<IO>
-where IO: AsyncRead + AsyncWrite + AsRawFd
+where IO: private::AsyncIO
 {
     unsafe fn initializer(&self) -> Initializer {
         match self {
             Stream::Socket(io) => io.initializer(),
             Stream::Tls(io) => io.initializer(),
+            #[cfg(target_os = "linux")]
             Stream::Ktls(io) => io.initializer()
         }
     }
@@ -84,18 +96,20 @@ where IO: AsyncRead + AsyncWrite + AsRawFd
         match self {
             Stream::Socket(io) => io.read(buf),
             Stream::Tls(io) => io.read(buf),
+            #[cfg(target_os = "linux")]
             Stream::Ktls(io) => io.read(buf)
         }
     }
 }
 
 impl<IO> io::Write for Stream<IO>
-where IO: AsyncRead + AsyncWrite + AsRawFd
+where IO: private::AsyncIO
 {
     fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
         match self {
             Stream::Socket(io) => io.write(buf),
             Stream::Tls(io) => io.write(buf),
+            #[cfg(target_os = "linux")]
             Stream::Ktls(io) => io.write(buf)
         }
     }
@@ -104,18 +118,20 @@ where IO: AsyncRead + AsyncWrite + AsRawFd
         match self {
             Stream::Socket(io) => io.flush(),
             Stream::Tls(io) => io.flush(),
+            #[cfg(target_os = "linux")]
             Stream::Ktls(io) => io.flush()
         }
     }
 }
 
 impl<IO> AsyncRead for Stream<IO>
-where IO: AsyncRead + AsyncWrite + AsRawFd
+where IO: private::AsyncIO
 {
     unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
         match self {
             Stream::Socket(io) => io.prepare_uninitialized_buffer(buf),
             Stream::Tls(io) => io.prepare_uninitialized_buffer(buf),
+            #[cfg(target_os = "linux")]
             Stream::Ktls(io) => io.prepare_uninitialized_buffer(buf)
         }
     }
@@ -124,18 +140,20 @@ where IO: AsyncRead + AsyncWrite + AsRawFd
         match self {
             Stream::Socket(io) => io.read_buf(buf),
             Stream::Tls(io) => io.read_buf(buf),
+            #[cfg(target_os = "linux")]
             Stream::Ktls(io) => io.read_buf(buf)
         }
     }
 }
 
 impl<IO> AsyncWrite for Stream<IO>
-where IO: AsyncRead + AsyncWrite + AsRawFd
+where IO: private::AsyncIO
 {
     fn write_buf<B: Buf>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
         match self {
             Stream::Socket(io) => io.write_buf(buf),
             Stream::Tls(io) => io.write_buf(buf),
+            #[cfg(target_os = "linux")]
             Stream::Ktls(io) => io.write_buf(buf)
         }
     }
@@ -144,11 +162,13 @@ where IO: AsyncRead + AsyncWrite + AsRawFd
         match self {
             Stream::Socket(io) => io.shutdown(),
             Stream::Tls(io) => io.shutdown(),
+            #[cfg(target_os = "linux")]
             Stream::Ktls(io) => io.shutdown()
         }
     }
 }
 
+#[cfg(unix)]
 impl<IO: AsRawFd> AsRawFd for Stream<IO> {
     fn as_raw_fd(&self) -> RawFd {
         match self {
@@ -157,7 +177,24 @@ impl<IO: AsRawFd> AsRawFd for Stream<IO> {
                 let (io, _) = io.get_ref();
                 io.as_raw_fd()
             },
+            #[cfg(target_os = "linux")]
             Stream::Ktls(io) => io.as_raw_fd()
         }
     }
+}
+
+#[cfg(unix)]
+mod private {
+    use super::*;
+
+    pub trait AsyncIO: AsyncRead + AsyncWrite + AsRawFd {}
+    impl<T: AsyncRead + AsyncWrite + AsRawFd> AsyncIO for T {}
+}
+
+#[cfg(not(unix))]
+mod private {
+    use super::*;
+
+    pub trait AsyncIO: AsyncRead + AsyncWrite {}
+    impl<T: AsyncRead + AsyncWrite> AsyncIO for T {}
 }

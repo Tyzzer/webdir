@@ -5,9 +5,7 @@ cache: cargo
 os:
     - linux
     - osx
+    - windows
 
 script:
-    - cargo check --no-default-features
     - cargo check
-    - cargo check --all-features
-    - cargo test

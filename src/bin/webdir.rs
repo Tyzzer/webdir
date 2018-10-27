@@ -86,11 +86,13 @@ fn main() -> Fallible<()> {
         config.ticketer = Ticketer::new();
 
         // ktls first
-        config.ignore_client_order = true;
-        let cipher = config.ciphersuites.remove(6);
-        config.ciphersuites.insert(0, cipher);
-        let cipher = config.ciphersuites.remove(8);
-        config.ciphersuites.insert(1, cipher);
+        #[cfg(target_os = "linux")] {
+            config.ignore_client_order = true;
+            let cipher = config.ciphersuites.remove(6);
+            config.ciphersuites.insert(0, cipher);
+            let cipher = config.ciphersuites.remove(8);
+            config.ciphersuites.insert(1, cipher);
+        }
 
         let config = Arc::new(config);
 

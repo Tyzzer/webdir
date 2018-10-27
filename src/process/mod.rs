@@ -17,7 +17,6 @@ use if_chain::if_chain;
 use maud::Render;
 use crate::WebDir;
 use crate::file::{ ChunkReader, SenderSink, TryClone };
-use crate::aio::AioReader;
 use crate::common::{ path_canonicalize, decode_path, html_utf8 };
 use self::entity::Entity;
 use self::sortdir::{ up, SortDir };
@@ -180,6 +179,8 @@ impl<'a> Process<'a> {
         resp
     }
 
+
+    #[cfg(not(target_os = "linux"))]
     pub fn sendchunk(&self, entity: &Entity, range: Option<Range<u64>>) -> Body {
         if Method::HEAD == self.req.method() {
             return Body::empty();
@@ -187,19 +188,35 @@ impl<'a> Process<'a> {
 
         debug!("send/chunk: {:?}", range);
 
-        let context = self.webdir.context.clone();
         let range = range.unwrap_or(0..entity.length);
         let (sender, body) = Body::channel();
         let sink = SenderSink(sender);
 
-        #[cfg(not(target_os = "linux"))]
         let done = tfs::File::open(entity.path.to_owned())
             .map(|fd| ChunkReader::new(fd, range))
             .and_then(|reader| reader.forward(sink))
             .map(drop)
             .map_err(|err| error!("send/chunk: {:?}", err));
 
-        #[cfg(target_os = "linux")]
+        hyper::rt::spawn(done);
+        body
+    }
+
+    #[cfg(target_os = "linux")]
+    pub fn sendchunk(&self, entity: &Entity, range: Option<Range<u64>>) -> Body {
+        use crate::aio::AioReader;
+
+        if Method::HEAD == self.req.method() {
+            return Body::empty();
+        }
+
+        debug!("send/aio: {:?}", range);
+
+        let range = range.unwrap_or(0..entity.length);
+        let (sender, body) = Body::channel();
+        let sink = SenderSink(sender);
+        let context = self.webdir.context.clone();
+
         let done = tfs::File::open(entity.path.to_owned())
             .map(|fd| AioReader::new(context, fd.into_std(), range))
             .and_then(|reader| reader.forward(sink))
@@ -207,7 +224,6 @@ impl<'a> Process<'a> {
             .map_err(|err| error!("send/aio: {:?}", err));
 
         hyper::rt::spawn(done);
-
         body
     }
 }
