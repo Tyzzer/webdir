@@ -53,8 +53,3 @@ rand = "0.5"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 tokio-linux-aio = "0.1"
-ktls = { git = "https://github.com/quininer/ktls" }
-tokio-rusktls = { git = "https://github.com/quininer/ktls" }
-
-[replace]
-"rustls:0.14.0" = { git = "https://github.com/quininer/rustls", branch = "ktls2" }
