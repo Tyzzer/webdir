@@ -85,6 +85,8 @@ fn main() -> Fallible<()> {
         config.set_single_cert(certs, key)?;
         config.ticketer = Ticketer::new();
 
+        config.alpn_protocols = vec![String::from("h2"), String::from("http/1.1")];
+
         // ktls first
         #[cfg(target_os = "linux")] {
             config.ignore_client_order = true;
