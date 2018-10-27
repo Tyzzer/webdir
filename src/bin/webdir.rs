@@ -12,7 +12,7 @@ use tokio_rustls::TlsAcceptor;
 use hyper::server::conn::Http;
 use slog::{ slog_o, Drain };
 use log::{ log, info, error };
-use webdir::{ WebDir, stream::Stream as WebStream };
+use webdir::{ WebDir, WebStream };
 
 
 #[derive(StructOpt)]
@@ -105,25 +105,25 @@ fn main() -> Fallible<()> {
 
     info!("bind: {:?}", listener.local_addr());
 
-    let webdir = WebDir { root, index: options.index };
+    let done = future::lazy(move || WebDir::new(root.clone(), options.index))
+        .and_then(move |webdir| {
+            listener.incoming().for_each(move |socket| {
+                info!("addr: {:?}", socket.peer_addr());
 
-    let done = listener.incoming().for_each(move |socket| {
-        let webdir = webdir.clone();
+                let webdir = webdir.clone();
+                let fut = WebStream::new(socket, acceptor.clone())
+                    .map_err(failure::Error::from)
+                    .and_then(move |stream| Http::new()
+                        .serve_connection(stream, webdir)
+                        .map_err(Into::into)
+                    )
+                    .map(drop)
+                    .map_err(|err| error!("http/err: {:?}", err));
 
-        info!("addr: {:?}", socket.peer_addr());
-
-        let fut = WebStream::new(socket, acceptor.clone())
-            .map_err(failure::Error::from)
-            .and_then(move |stream| Http::new()
-                .serve_connection(stream, webdir)
-                .map_err(Into::into)
-            )
-            .map(drop)
-            .map_err(|err| error!("http/err: {:?}", err));
-
-        hyper::rt::spawn(fut);
-        Ok(())
-    })
+                hyper::rt::spawn(fut);
+                Ok(())
+            })
+        })
         .map_err(|err| error!("socket/err: {:?}", err));
 
     hyper::rt::run(done);

@@ -7,15 +7,7 @@ use tokio_io::io::Window;
 use hyper::body::Sender;
 use crate::common::econv;
 
-const CHUNK_LENGTH: usize = 1 << 16;
-
-macro_rules! try_ready {
-    ($e:expr) => (match $e {
-        Ok(tokio::prelude::Async::Ready(t)) => t,
-        Ok(tokio::prelude::Async::NotReady) => return Ok(tokio::prelude::Async::NotReady),
-        Err(e) => return Err(From::from(e)),
-    })
-}
+pub const CHUNK_LENGTH: usize = 1 << 16;
 
 
 pub struct TryClone(pub tfs::File);
@@ -42,8 +34,6 @@ impl ChunkReader {
     }
 }
 
-pub struct SenderSink(pub Sender);
-
 impl Stream for ChunkReader {
     type Item = hyper::Chunk;
     type Error = io::Error;
@@ -68,6 +58,8 @@ impl Stream for ChunkReader {
         }
     }
 }
+
+pub struct SenderSink(pub Sender);
 
 impl Sink for SenderSink {
     type SinkItem = hyper::Chunk;

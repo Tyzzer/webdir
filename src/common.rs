@@ -7,6 +7,14 @@ use headers_ext as header;
 use maud::{ html, Markup };
 
 
+macro_rules! try_ready {
+    ($e:expr) => (match $e {
+        Ok(tokio::prelude::Async::Ready(t)) => t,
+        Ok(tokio::prelude::Async::NotReady) => return Ok(tokio::prelude::Async::NotReady),
+        Err(e) => return Err(From::from(e)),
+    })
+}
+
 macro_rules! chain {
     ( @parse + $stream:expr ) => {
         $stream

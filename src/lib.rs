@@ -1,9 +1,10 @@
 #![feature(read_initializer, never_type, proc_macro_hygiene)]
 
 #[macro_use]
-pub mod common;
-pub mod stream;
-pub mod file;
+mod common;
+mod stream;
+mod file;
+mod aio;
 mod process;
 
 use std::io;
@@ -13,14 +14,27 @@ use tokio::prelude::*;
 use hyper::service::Service;
 use hyper::{ StatusCode, Request, Response, Body };
 use log::{ log, info, debug };
+use tokio_linux_aio::AioContext;
 use crate::process::Process;
 use crate::common::err_html;
+use crate::aio::HyperExecutor;
+pub use crate::stream::Stream as WebStream;
 
 
 #[derive(Clone)]
 pub struct WebDir {
     pub root: Arc<PathBuf>,
-    pub index: bool
+    pub index: bool,
+    context: AioContext
+}
+
+impl WebDir {
+    pub fn new(root: Arc<PathBuf>, index: bool) -> io::Result<Self> {
+        static EXECUTOR: &'static HyperExecutor = &HyperExecutor;
+
+        let context = AioContext::new(EXECUTOR, 10)?;
+        Ok(WebDir { root, index, context })
+    }
 }
 
 impl Service for WebDir {

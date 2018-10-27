@@ -20,7 +20,7 @@ doc = false
 serde = "1.0"
 structopt = "0.2"
 failure = "0.1"
-log = "0.3"
+log = { version = "0.3", features = ["release_max_level_debug"] }
 slog = "2"
 slog-stdlog = "3.0.4-pre"
 slog-scope = "4"
