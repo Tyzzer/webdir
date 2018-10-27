@@ -1,3 +1,0 @@
-[target.x86_64-pc-windows-msvc]
-linker = "lld-link"
-# linker = "x86_64-w64-mingw32-gcc"
