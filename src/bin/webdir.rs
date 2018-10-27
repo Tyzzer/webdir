@@ -107,7 +107,7 @@ fn main() -> Fallible<()> {
 
     info!("bind: {:?}", listener.local_addr());
 
-    let done = future::lazy(move || WebDir::new(root.clone(), options.index))
+    let done = future::lazy(move || WebDir::new(root, options.index))
         .and_then(move |webdir| {
             listener.incoming().for_each(move |socket| {
                 info!("addr: {:?}", socket.peer_addr());
@@ -120,13 +120,13 @@ fn main() -> Fallible<()> {
                         .map_err(Into::into)
                     )
                     .map(drop)
-                    .map_err(|err| error!("http/err: {:?}", err));
+                    .map_err(|err| error!("socket/err: {:?}", err));
 
                 hyper::rt::spawn(fut);
                 Ok(())
             })
         })
-        .map_err(|err| error!("socket/err: {:?}", err));
+        .map_err(|err| error!("init/err: {:?}", err));
 
     hyper::rt::run(done);
     Ok(())

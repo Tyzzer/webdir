@@ -158,7 +158,8 @@ impl<'a> Process<'a> {
                                 type Error = _;
 
                                 ( headers ),
-                                ( + ChunkReader::new(fd, range) )
+                                ( + ChunkReader::new(fd, range) ),
+                                ( "\r\n" )
                             }
                         })
                         .flatten()
