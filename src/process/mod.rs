@@ -5,7 +5,7 @@ use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
-use log::{ log, error, debug };
+use log::{ error, debug };
 use tokio::prelude::*;
 use tokio::fs as tfs;
 use hyper::{ Request, Response, Method, Body, StatusCode };

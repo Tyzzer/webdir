@@ -1,6 +1,9 @@
 #![feature(read_initializer, never_type, proc_macro_hygiene)]
 
 #[macro_use]
+extern crate log;
+
+#[macro_use]
 mod common;
 mod stream;
 mod file;
@@ -15,7 +18,7 @@ use std::path::PathBuf;
 use tokio::prelude::*;
 use hyper::service::Service;
 use hyper::{ StatusCode, Request, Response, Body };
-use log::{ log, info, debug };
+use log::{ info, debug };
 use crate::process::Process;
 use crate::common::err_html;
 pub use crate::stream::Stream as WebStream;
