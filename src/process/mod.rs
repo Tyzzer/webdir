@@ -5,7 +5,7 @@ use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
-use log::{ error, debug };
+use log::*;
 use tokio::prelude::*;
 use tokio::fs as tfs;
 use hyper::{ Request, Response, Method, Body, StatusCode };
@@ -136,11 +136,7 @@ impl<'a> Process<'a> {
                         .map(move |(range, fd)| {
                             let mut map = HeaderMap::new();
                             map.typed_insert(header::ContentType::from(mime_type.clone()));
-                            map.typed_insert(header::ContentRange::bytes(
-                                range.start,
-                                range.end - 1,
-                                length
-                            ));
+                            map.typed_insert(header::ContentRange::bytes(range.clone(), length).unwrap());
 
                             let mut headers = boundary1.as_bytes().to_vec();
                             for (name, val) in &map {

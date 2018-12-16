@@ -1,9 +1,6 @@
 #![feature(read_initializer, never_type, proc_macro_hygiene)]
 
 #[macro_use]
-extern crate log;
-
-#[macro_use]
 mod common;
 mod stream;
 mod file;
@@ -18,7 +15,7 @@ use std::path::PathBuf;
 use tokio::prelude::*;
 use hyper::service::Service;
 use hyper::{ StatusCode, Request, Response, Body };
-use log::{ info, debug };
+use log::*;
 use crate::process::Process;
 use crate::common::err_html;
 pub use crate::stream::Stream as WebStream;
@@ -70,7 +67,7 @@ impl Service for WebDir {
                 match err.kind() {
                     io::ErrorKind::NotFound => *resp.status_mut() =  StatusCode::NOT_FOUND,
                     io::ErrorKind::PermissionDenied => *resp.status_mut() =  StatusCode::FORBIDDEN,
-                    _ => *resp.status_mut() =  StatusCode::INTERNAL_SERVER_ERROR
+                    _ => *resp.status_mut() = StatusCode::INTERNAL_SERVER_ERROR
                 }
 
                 future::ok(resp)

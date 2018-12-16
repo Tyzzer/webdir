@@ -1,6 +1,3 @@
-#[macro_use]
-extern crate log;
-
 use std::{ fs, env };
 use std::io::Cursor;
 use std::sync::Arc;
@@ -14,7 +11,7 @@ use tokio::net::TcpListener;
 use tokio_rustls::TlsAcceptor;
 use hyper::server::conn::Http;
 use slog::{ slog_o, Drain };
-use log::{ info, error };
+use log::*;
 use webdir::{ WebDir, WebStream };
 
 

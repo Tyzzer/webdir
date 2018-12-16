@@ -5,7 +5,7 @@ use std::fs::Metadata;
 use std::str::FromStr;
 use smallvec::SmallVec;
 use rand::{ Rng, thread_rng, distributions::Alphanumeric };
-use log::debug;
+use log::*;
 use hyper::{ StatusCode, Body };
 use headers_core::HeaderMapExt;
 use headers_core::header::HeaderMap;
@@ -116,7 +116,7 @@ impl<'a> Entity<'a> {
                 let mut map = self.headers();
                 let range = &vec[0];
                 map.typed_insert(header::ContentLength(range.end - range.start));
-                map.typed_insert(header::ContentRange::bytes(range.start, range.end - 1, length));
+                map.typed_insert(header::ContentRange::bytes(range.clone(), length).unwrap());
                 Result(StatusCode::PARTIAL_CONTENT, map, Value::Range(vec.pop().unwrap()))
             } else {
                 let boundary = thread_rng()
