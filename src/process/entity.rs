@@ -7,9 +7,8 @@ use smallvec::SmallVec;
 use rand::{ Rng, thread_rng, distributions::Alphanumeric };
 use log::*;
 use hyper::{ StatusCode, Body };
-use headers_core::HeaderMapExt;
-use headers_core::header::HeaderMap;
-use headers_ext as header;
+use http::HeaderMap;
+use headers::HeaderMapExt;
 use mime::Mime;
 use mime_guess::guess_mime_type;
 use crate::common::err_html;
@@ -41,11 +40,11 @@ impl<'a> Entity<'a> {
     pub fn headers(&self) -> HeaderMap {
         let mut map = HeaderMap::new();
 
-        map.typed_insert(header::AcceptRanges::bytes());
-        map.typed_insert(header::ContentType::from(guess_mime_type(self.path)));
+        map.typed_insert(headers::AcceptRanges::bytes());
+        map.typed_insert(headers::ContentType::from(guess_mime_type(self.path)));
 
         if let Ok(date) = self.metadata.modified() {
-            map.typed_insert(header::LastModified::from(date));
+            map.typed_insert(headers::LastModified::from(date));
         }
 
         map
@@ -54,14 +53,14 @@ impl<'a> Entity<'a> {
     pub fn multipart_headers(&self, boundary: &str) -> HeaderMap {
         let mut map = HeaderMap::new();
 
-        map.typed_insert(header::AcceptRanges::bytes());
+        map.typed_insert(headers::AcceptRanges::bytes());
 
         // TODO https://github.com/hyperium/mime/issues/52
         let mime = Mime::from_str(format!("multipart/byteranges; boundary={}", boundary).as_str()).unwrap();
-        map.typed_insert(header::ContentType::from(mime));
+        map.typed_insert(headers::ContentType::from(mime));
 
         if let Ok(date) = self.metadata.modified() {
-            map.typed_insert(header::LastModified::from(date));
+            map.typed_insert(headers::LastModified::from(date));
         }
 
         map
@@ -70,7 +69,7 @@ impl<'a> Entity<'a> {
     pub fn result(&self, map: &HeaderMap) -> Result {
         // TODO check etag
 
-        if let Some(time) = map.typed_get::<header::IfModifiedSince>() {
+        if let Some(time) = map.typed_get::<headers::IfModifiedSince>() {
             if let Ok(time2) = self.metadata.modified() {
                 if !time.is_modified(time2) {
                     return not_modified(format_args!("{:?} vs {:?}", time, time2));
@@ -78,7 +77,7 @@ impl<'a> Entity<'a> {
             }
         }
 
-        if let Some(ranges) = map.typed_get::<header::Range>() {
+        if let Some(ranges) = map.typed_get::<headers::Range>() {
             let length = self.length;
 
             let mut vec = ranges
@@ -106,7 +105,7 @@ impl<'a> Entity<'a> {
 
             if vec.is_empty() {
                 let mut map = self.headers();
-                map.typed_insert(header::ContentRange::unsatisfied_bytes(length));
+                map.typed_insert(headers::ContentRange::unsatisfied_bytes(length));
                 Result(
                     StatusCode::RANGE_NOT_SATISFIABLE,
                     map,
@@ -115,8 +114,8 @@ impl<'a> Entity<'a> {
             } else if vec.len() == 1 {
                 let mut map = self.headers();
                 let range = &vec[0];
-                map.typed_insert(header::ContentLength(range.end - range.start));
-                map.typed_insert(header::ContentRange::bytes(range.clone(), length).unwrap());
+                map.typed_insert(headers::ContentLength(range.end - range.start));
+                map.typed_insert(headers::ContentRange::bytes(range.clone(), length).unwrap());
                 Result(StatusCode::PARTIAL_CONTENT, map, Value::Range(vec.pop().unwrap()))
             } else {
                 let boundary = thread_rng()
@@ -128,7 +127,7 @@ impl<'a> Entity<'a> {
             }
         } else {
             let mut map = self.headers();
-            map.typed_insert(header::ContentLength(self.length));
+            map.typed_insert(headers::ContentLength(self.length));
             Result(StatusCode::OK, map, Value::None)
         }
     }

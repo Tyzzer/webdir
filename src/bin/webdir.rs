@@ -70,7 +70,7 @@ fn main() -> Fallible<()> {
     let logger = slog::Logger::root(drain, slog_o!("version" => env!("CARGO_PKG_VERSION")));
 
     let _scope_guard = slog_scope::set_global_logger(logger);
-    let _log_guard = slog_stdlog::init()?;
+    slog_stdlog::init()?;
 
     let root =
         if let Some(ref p) = options.root { Arc::new(p.canonicalize()?) }
@@ -84,22 +84,8 @@ fn main() -> Fallible<()> {
         let mut config = ServerConfig::new(NoClientAuth::new());
         config.set_single_cert(certs, key)?;
         config.ticketer = Ticketer::new();
-
-        config.alpn_protocols = vec![String::from("h2"), String::from("http/1.1")];
-
-        // ktls first
-        #[cfg(target_os = "linux")] {
-            config.ignore_client_order = true;
-            let cipher = config.ciphersuites.remove(6);
-            config.ciphersuites.insert(0, cipher);
-            let cipher = config.ciphersuites.remove(8);
-            config.ciphersuites.insert(1, cipher);
-        }
-
+        config.alpn_protocols = vec!["h2".into(), "http/1.1".into()];
         let config = Arc::new(config);
-
-        // TODO
-
         Some(TlsAcceptor::from(config))
     } else {
         None

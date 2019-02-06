@@ -3,7 +3,6 @@ use std::ffi::OsStr;
 use std::ops::Add;
 use std::path::{ Path, PathBuf, Component };
 use percent_encoding::{ DEFAULT_ENCODE_SET, percent_encode, percent_decode };
-use headers_ext as header;
 use maud::{ html, Markup };
 
 
@@ -34,8 +33,8 @@ macro_rules! chain {
     };
 }
 
-pub fn html_utf8() -> header::ContentType {
-    header::ContentType::from(mime::TEXT_HTML_UTF_8)
+pub fn html_utf8() -> headers::ContentType {
+    headers::ContentType::from(mime::TEXT_HTML_UTF_8)
 }
 
 pub fn err_html(display: fmt::Arguments) -> Markup {

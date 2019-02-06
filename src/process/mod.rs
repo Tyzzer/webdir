@@ -9,9 +9,8 @@ use log::*;
 use tokio::prelude::*;
 use tokio::fs as tfs;
 use hyper::{ Request, Response, Method, Body, StatusCode };
-use headers_core::HeaderMapExt;
-use headers_core::header::HeaderMap;
-use headers_ext as header;
+use http::HeaderMap;
+use headers::HeaderMapExt;
 use mime_guess::guess_mime_type;
 use if_chain::if_chain;
 use maud::Render;
@@ -135,8 +134,8 @@ impl<'a> Process<'a> {
                         .zip(TryClone(fd))
                         .map(move |(range, fd)| {
                             let mut map = HeaderMap::new();
-                            map.typed_insert(header::ContentType::from(mime_type.clone()));
-                            map.typed_insert(header::ContentRange::bytes(range.clone(), length).unwrap());
+                            map.typed_insert(headers::ContentType::from(mime_type.clone()));
+                            map.typed_insert(headers::ContentRange::bytes(range.clone(), length).unwrap());
 
                             let mut headers = boundary1.as_bytes().to_vec();
                             for (name, val) in &map {

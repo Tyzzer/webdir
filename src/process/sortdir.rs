@@ -84,7 +84,7 @@ pub struct Entry {
 }
 
 impl Entry {
-    #[cfg_attr(feature = "cargo-clippy", allow(needless_pass_by_value))]
+    #[allow(clippy::needless_pass_by_value)]
     pub fn new(entry: DirEntry) -> io::Result<Self> {
         let mut metadata = entry.metadata()?;
         let path = entry.path();

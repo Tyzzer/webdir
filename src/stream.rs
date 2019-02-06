@@ -21,6 +21,7 @@ pub enum InnerAccept<IO, Fut> {
 impl<IO> Stream<IO>
 where IO: private::AsyncIO
 {
+    #[allow(clippy::new_ret_no_self)]
     pub fn new(io: IO, accept: Option<TlsAcceptor>)
         -> InnerAccept<IO, impl Future<Item=Self, Error=io::Error>>
     {
@@ -31,7 +32,7 @@ where IO: private::AsyncIO
         }
     }
 
-    pub fn get_alpn_protocol(&self) -> Option<&str> {
+    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
         match self {
             Stream::Socket(_) => None,
             Stream::Tls(io) => {
