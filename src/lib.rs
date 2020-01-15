@@ -3,16 +3,13 @@
 #[macro_use]
 mod common;
 mod stream;
-mod file;
 mod process;
 
-#[cfg(target_os = "linux")]
-mod aio;
-
 use std::io;
+use std::task::{ Context, Poll };
 use std::sync::Arc;
 use std::path::PathBuf;
-use tokio::prelude::*;
+use futures::future;
 use hyper::service::Service;
 use hyper::{ StatusCode, Request, Response, Body };
 use log::*;
@@ -20,41 +17,28 @@ use crate::process::Process;
 use crate::common::err_html;
 pub use crate::stream::Stream as WebStream;
 
-
 #[derive(Clone)]
 pub struct WebDir {
     pub root: Arc<PathBuf>,
     pub index: bool,
-
-    #[cfg(target_os = "linux")]
-    context: tokio_linux_aio::AioContext
 }
 
 impl WebDir {
-    #[cfg(not(target_os = "linux"))]
     pub fn new(root: Arc<PathBuf>, index: bool) -> io::Result<Self> {
         Ok(WebDir { root, index })
     }
-
-    #[cfg(target_os = "linux")]
-    pub fn new(root: Arc<PathBuf>, index: bool) -> io::Result<Self> {
-        use tokio_linux_aio::AioContext;
-        use crate::aio::HyperExecutor;
-
-        static EXECUTOR: &'static HyperExecutor = &HyperExecutor;
-
-        let context = AioContext::new(EXECUTOR, 10)?;
-        Ok(WebDir { root, index, context })
-    }
 }
 
-impl Service for WebDir {
-    type ReqBody = Body;
-    type ResBody = Body;
+impl Service<Request<Body>> for WebDir {
+    type Response = Response<Body>;
     type Error = !;
-    type Future = future::FutureResult<Response<Self::ResBody>, Self::Error>;
+    type Future = future::Ready<Result<Response<Body>, Self::Error>>;
 
-    fn call(&mut self, req: Request<Self::ReqBody>) -> Self::Future {
+    fn poll_ready(&mut self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
+        Poll::Ready(Ok(()))
+    }
+
+    fn call(&mut self, req: Request<Body>) -> Self::Future {
         info!("request: {} {}", req.method(), req.uri().path());
         debug!("request: {:?}", req.headers());
 

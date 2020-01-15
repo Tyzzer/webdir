@@ -1,37 +1,10 @@
-use std::{ io, fmt };
+use std::fmt;
 use std::ffi::OsStr;
 use std::ops::Add;
 use std::path::{ Path, PathBuf, Component };
-use percent_encoding::{ DEFAULT_ENCODE_SET, percent_encode, percent_decode };
+use percent_encoding::{ NON_ALPHANUMERIC, percent_encode, percent_decode };
 use maud::{ html, Markup };
 
-
-macro_rules! try_ready {
-    ($e:expr) => (match $e {
-        Ok(tokio::prelude::Async::Ready(t)) => t,
-        Ok(tokio::prelude::Async::NotReady) => return Ok(tokio::prelude::Async::NotReady),
-        Err(e) => return Err(From::from(e)),
-    })
-}
-
-macro_rules! chain {
-    ( @parse + $stream:expr ) => {
-        $stream
-    };
-    ( @parse $chunk:expr ) => {
-        tokio::prelude::stream::once(Ok(hyper::Chunk::from($chunk)))
-    };
-    (
-        type Item = $item:ty;
-        type Error = $err:ty;
-        $( ( $( $stream:tt )* ) ),*
-    ) => {
-        tokio::prelude::stream::empty::<$item, $err>()
-        $(
-            .chain(chain!(@parse $( $stream )*))
-        )*
-    };
-}
 
 pub fn html_utf8() -> headers::ContentType {
     headers::ContentType::from(mime::TEXT_HTML_UTF_8)
@@ -42,23 +15,6 @@ pub fn err_html(display: fmt::Arguments) -> Markup {
         h1 { strong { "( ・_・)" } }
         h2 { (display) }
     }
-}
-
-pub fn econv(e: hyper::Error) -> io::Error {
-    io::Error::new(
-        if e.is_parse() {
-            io::ErrorKind::InvalidData
-        } else if e.is_canceled() {
-            io::ErrorKind::Interrupted
-        } else if e.is_closed() {
-            io::ErrorKind::ConnectionAborted
-        } else if e.is_user() {
-            io::ErrorKind::InvalidInput
-        } else {
-            io::ErrorKind::Other
-        },
-        e
-    )
 }
 
 pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBuf) {
@@ -85,14 +41,14 @@ pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBu
 pub fn encode_path(name: &OsStr) -> String {
     use std::os::unix::ffi::OsStrExt;
 
-    percent_encode(name.as_bytes(), DEFAULT_ENCODE_SET)
+    percent_encode(name.as_bytes(), NON_ALPHANUMERIC)
         .fold(String::from("./"), Add::add)
 }
 
 #[cfg(not(unix))]
 #[inline]
 pub fn encode_path(name: &OsStr) -> String {
-    percent_encode(name.to_string_lossy().as_bytes(), DEFAULT_ENCODE_SET)
+    percent_encode(name.to_string_lossy().as_bytes(), NON_ALPHANUMERIC)
         .fold(String::from("./"), Add::add)
 }
 
@@ -110,7 +66,8 @@ pub fn decode_path(path: &str) -> PathBuf {
 #[cfg(not(unix))]
 #[inline]
 pub fn decode_path(path: &str) -> PathBuf {
-    let path_buf = percent_decode(path.as_bytes()).collect::<Vec<u8>>();
-    let path_buf = String::from_utf8_lossy(&path_buf).into_owned();
+    let path_buf = percent_decode(path.as_bytes())
+        .decode_utf8_lossy()
+        .into_owned();
     PathBuf::from(path_buf)
 }

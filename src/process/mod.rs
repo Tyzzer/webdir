@@ -6,16 +6,17 @@ use std::ops::Range;
 use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
 use log::*;
+use futures::future::TryFutureExt;
+use bytes::Bytes;
 use tokio::prelude::*;
-use tokio::fs as tfs;
+use tokio::fs::File;
 use hyper::{ Request, Response, Method, Body, StatusCode };
 use http::HeaderMap;
 use headers::HeaderMapExt;
-use mime_guess::guess_mime_type;
 use if_chain::if_chain;
 use maud::Render;
 use crate::WebDir;
-use crate::file::{ ChunkReader, SenderSink, TryClone };
+// use crate::file::{ ChunkReader, SenderSink, TryClone };
 use crate::common::{ path_canonicalize, decode_path, html_utf8 };
 use self::entity::Entity;
 use self::sortdir::{ up, SortDir };
@@ -64,33 +65,23 @@ impl<'a> Process<'a> {
         </style></head><body><table><tbody>";
         const HTML_FOOTER: &str = "</tbody></table></body></html>";
 
-        let (sender, body) = Body::channel();
-        let sink = SenderSink(sender);
+        let (mut sender, body) = Body::channel();
 
         debug!("send/dir: {}", is_top);
 
-        let stream = chain! {
-            type Item = _;
-            type Error = io::Error;
+        let fut = async move {
+            sender.send_data(Bytes::from_static(HTML_HEADER.as_bytes())).await?;
+            sender.send_data(Bytes::from(up(is_top).into_string().into_bytes())).await?;
+            for entry in SortDir::new(dir) {
+                let string = entry?.render().into_string();
+                sender.send_data(Bytes::from(string.into_bytes())).await?;
+            }
+            sender.send_data(Bytes::from_static(HTML_FOOTER.as_bytes())).await?;
 
-            ( HTML_HEADER ),
-            ( up(is_top).into_string() ),
-            ( + stream::iter_result(SortDir::new(dir)
-                    .map(|entry| entry
-                        .map(|entry| entry.render().into_string())
-                        .map(hyper::Chunk::from)
-                    )
-                )
-            ),
-            ( HTML_FOOTER )
-        };
+            Ok(()) as anyhow::Result<()>
+        }.unwrap_or_else(|err| error!("send/dir: {:?}", err));
 
-        let done = stream
-            .forward(sink)
-            .map(drop)
-            .map_err(|err| error!("send/dir: {:?}", err));
-
-        hyper::rt::spawn(done);
+        tokio::spawn(fut);
 
         let mut resp = Response::new(body);
         *resp.status_mut() = StatusCode::OK;
@@ -108,64 +99,62 @@ impl<'a> Process<'a> {
                 map.typed_insert(html_utf8());
                 Response::new(err)
             },
-            entity::Value::None => {
-                let body = self.sendchunk(&entity, None);
-                Response::new(body)
-            },
-            entity::Value::Range(range) => {
-                let body = self.sendchunk(&entity, Some(range));
-                Response::new(body)
-            },
+            entity::Value::None => Response::new(self.sendchunk(&entity, None)),
+            entity::Value::Range(range) => Response::new(self.sendchunk(&entity, Some(range))),
             entity::Value::Multipart(boundary, ranges) => {
                 if Method::HEAD == self.req.method() {
                     return Response::new(Body::empty());
                 }
 
-                let mime_type = guess_mime_type(entity.path);
+                let mime_type = mime_guess::from_path(entity.path).first_or_octet_stream();
                 let boundary1 = format!("--{}\r\n", boundary);
                 let boundary2 = format!("--{}--", boundary);
 
-                let (sender, body) = Body::channel();
-                let sink = SenderSink(sender);
+                let (mut sender, body) = Body::channel();
+                let path = entity.path.to_owned();
                 let length = entity.length;
 
-                let done = tfs::File::open(entity.path.to_owned())
-                    .and_then(move |fd| stream::iter_ok(ranges.into_iter())
-                        .zip(TryClone(fd))
-                        .map(move |(range, fd)| {
-                            let mut map = HeaderMap::new();
-                            map.typed_insert(headers::ContentType::from(mime_type.clone()));
-                            map.typed_insert(headers::ContentRange::bytes(range.clone(), length).unwrap());
+                let fut = async move {
+                    let mut fd = File::open(path).await?.take(0);
+                    let mut buf = vec![0; 1 << 16];
 
-                            let mut headers = boundary1.as_bytes().to_vec();
-                            for (name, val) in &map {
-                                headers.extend_from_slice(name.as_str().as_bytes());
-                                headers.extend_from_slice(b": ");
-                                headers.extend_from_slice(val.as_bytes());
-                                headers.extend_from_slice(b"\r\n");
-                            }
+                    for range in ranges {
+                        let mut map = HeaderMap::new();
+                        map.typed_insert(headers::ContentType::from(mime_type.clone()));
+                        map.typed_insert(headers::ContentRange::bytes(range.clone(), length).unwrap());
+
+                        let mut headers = boundary1.as_bytes().to_vec();
+                        for (name, val) in &map {
+                            headers.extend_from_slice(name.as_str().as_bytes());
+                            headers.extend_from_slice(b": ");
+                            headers.extend_from_slice(val.as_bytes());
                             headers.extend_from_slice(b"\r\n");
+                        }
+                        headers.extend_from_slice(b"\r\n");
 
-                            debug!("send/multipart: {:?}", range);
+                        debug!("send/multipart: {:?}", range);
 
-                            chain!{
-                                type Item = _;
-                                type Error = _;
+                        let start = range.start;
+                        let len = range.end - range.start;
+                        fd.get_mut().seek(io::SeekFrom::Start(start)).await?;
+                        fd.set_limit(len);
 
-                                ( headers ),
-                                ( + ChunkReader::new(fd, range) ),
-                                ( "\r\n" )
+                        sender.send_data(Bytes::from(headers)).await?;
+                        loop {
+                            match fd.read(&mut buf).await? {
+                                0 => break,
+                                n => sender.send_data(Bytes::from(Vec::from(&buf[..n]))).await?
                             }
-                        })
-                        .flatten()
-                        .chain(stream::once(Ok(hyper::Chunk::from(boundary2))))
-                        .forward(sink)
-                    )
-                    .map(drop)
-                    .map_err(|err| error!("send/multipart: {:?}", err));
+                        }
+                        sender.send_data(Bytes::from_static(b"\r\n")).await?;
+                    }
 
-                hyper::rt::spawn(done);
+                    sender.send_data(Bytes::from(boundary2)).await?;
 
+                    Ok(()) as anyhow::Result<()>
+                }.unwrap_or_else(|err| error!("send/multipart: {:?}", err));
+
+                tokio::spawn(fut);
                 Response::new(body)
             }
         };
@@ -175,8 +164,6 @@ impl<'a> Process<'a> {
         resp
     }
 
-
-    #[cfg(not(target_os = "linux"))]
     pub fn sendchunk(&self, entity: &Entity, range: Option<Range<u64>>) -> Body {
         if Method::HEAD == self.req.method() {
             return Body::empty();
@@ -184,42 +171,31 @@ impl<'a> Process<'a> {
 
         debug!("send/chunk: {:?}", range);
 
+        let path = entity.path.to_owned();
         let range = range.unwrap_or(0..entity.length);
-        let (sender, body) = Body::channel();
-        let sink = SenderSink(sender);
+        let start = range.start;
+        let len = range.end - range.start;
+        let (mut sender, body) = Body::channel();
 
-        let done = tfs::File::open(entity.path.to_owned())
-            .map(|fd| ChunkReader::new(fd, range))
-            .and_then(|reader| reader.forward(sink))
-            .map(drop)
-            .map_err(|err| error!("send/chunk: {:?}", err));
+        let fut = async move {
+            let mut fd = {
+                let mut fd = File::open(path).await?;
+                fd.seek(io::SeekFrom::Start(start)).await?;
+                fd.take(len)
+            };
+            let mut buf = vec![0; 1 << 16];
 
-        hyper::rt::spawn(done);
-        body
-    }
+            loop {
+                match fd.read(&mut buf).await? {
+                    0 => break,
+                    n => sender.send_data(Bytes::from(Vec::from(&buf[..n]))).await?
+                }
+            }
 
-    #[cfg(target_os = "linux")]
-    pub fn sendchunk(&self, entity: &Entity, range: Option<Range<u64>>) -> Body {
-        use crate::aio::AioReader;
+            Ok(()) as anyhow::Result<()>
+        }.unwrap_or_else(|err| error!("send/chunk: {:?}", err));
 
-        if Method::HEAD == self.req.method() {
-            return Body::empty();
-        }
-
-        debug!("send/aio: {:?}", range);
-
-        let range = range.unwrap_or(0..entity.length);
-        let (sender, body) = Body::channel();
-        let sink = SenderSink(sender);
-        let context = self.webdir.context.clone();
-
-        let done = tfs::File::open(entity.path.to_owned())
-            .map(|fd| AioReader::new(context, fd.into_std(), range))
-            .and_then(|reader| reader.forward(sink))
-            .map(drop)
-            .map_err(|err| error!("send/aio: {:?}", err));
-
-        hyper::rt::spawn(done);
+        tokio::spawn(fut);
         body
     }
 }

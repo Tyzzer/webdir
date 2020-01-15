@@ -10,7 +10,6 @@ use hyper::{ StatusCode, Body };
 use http::HeaderMap;
 use headers::HeaderMapExt;
 use mime::Mime;
-use mime_guess::guess_mime_type;
 use crate::common::err_html;
 
 
@@ -41,7 +40,8 @@ impl<'a> Entity<'a> {
         let mut map = HeaderMap::new();
 
         map.typed_insert(headers::AcceptRanges::bytes());
-        map.typed_insert(headers::ContentType::from(guess_mime_type(self.path)));
+        let mime = mime_guess::from_path(self.path).first_or_octet_stream();
+        map.typed_insert(headers::ContentType::from(mime));
 
         if let Ok(date) = self.metadata.modified() {
             map.typed_insert(headers::LastModified::from(date));

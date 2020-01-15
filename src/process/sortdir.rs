@@ -1,11 +1,12 @@
 use std::{ io, fmt };
 use std::cmp::Ordering;
 use std::ffi::OsString;
+use std::time::SystemTime;
 use std::fs::{ DirEntry, ReadDir, Metadata };
 use smallvec::SmallVec;
 use maud::{ html, Render, Markup };
-use chrono::{ Utc, DateTime };
-use humanesort::HumaneOrder;
+use time::PrimitiveDateTime;
+use human_sort::compare;
 use crate::common::encode_path;
 
 
@@ -21,10 +22,7 @@ impl SortDir {
         fn sort_by_entry(x: &io::Result<Entry>, y: &io::Result<Entry>) -> Ordering {
             if let (&Ok(ref x), &Ok(ref y)) = (x, y) {
                 match Ord::cmp(&x.ty, &y.ty) {
-                    Ordering::Equal => HumaneOrder::humane_cmp(
-                        &x.name.to_string_lossy(),
-                        &y.name.to_string_lossy()
-                    ),
+                    Ordering::Equal => compare(&x.name.to_string_lossy(), &y.name.to_string_lossy()),
                     order => order
                 }
             } else {
@@ -34,8 +32,8 @@ impl SortDir {
 
         let mut buf = readdir
             .by_ref()
-            .map(|entry| entry.and_then(Entry::new))
             .take(SORTDIR_BUFF_LENGTH)
+            .map(|entry| entry.and_then(Entry::new))
             .collect::<SmallVec<_>>();
         buf.sort_unstable_by(|x, y| sort_by_entry(y, x));
 
@@ -122,16 +120,16 @@ impl Entry {
     }
 
     #[inline]
-    pub fn time(&self) -> io::Result<DateTime<Utc>> {
-        self.metadata.modified().map(Into::into)
+    pub fn time(&self) -> io::Result<PrimitiveDateTime> {
+        let time = self.metadata.modified()?;
+        let time = time.duration_since(SystemTime::UNIX_EPOCH)
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+        Ok(PrimitiveDateTime::from_unix_timestamp(time.as_secs() as _))
     }
 
     #[inline]
     pub fn size(&self) -> String {
-        use unbytify::bytify;
-
-        let (value, unit) = bytify(self.metadata.len());
-        format!("{} {}", value, unit)
+        bytesize::to_string(self.metadata.len(), true)
     }
 }
 

@@ -1,21 +1,22 @@
-use std::io::{ self, Initializer };
+use std::io;
+use std::pin::Pin;
+use std::marker::Unpin;
+use std::future::Future;
+use std::mem::MaybeUninit;
+use std::task::{ Context, Poll };
 use bytes::{ Buf, BufMut };
-use rustls::{ Session, ServerSession };
-use tokio::prelude::*;
-use tokio_rustls::{ TlsAcceptor, TlsStream };
-
-#[cfg(unix)]
-use std::os::unix::io::{ AsRawFd, RawFd };
+use tokio::io::{ AsyncRead, AsyncWrite };
+use tokio_rustls::{ TlsAcceptor, Accept, server::TlsStream };
 
 
 pub enum Stream<IO> {
     Socket(IO),
-    Tls(TlsStream<IO, ServerSession>)
+    Tls(TlsStream<IO>)
 }
 
-pub enum InnerAccept<IO, Fut> {
+pub enum AllAccept<IO> {
     Socket(Option<IO>),
-    Fut(Fut)
+    Fut(Accept<IO>)
 }
 
 impl<IO> Stream<IO>
@@ -23,138 +24,95 @@ where IO: private::AsyncIO
 {
     #[allow(clippy::new_ret_no_self)]
     pub fn new(io: IO, accept: Option<TlsAcceptor>)
-        -> InnerAccept<IO, impl Future<Item=Self, Error=io::Error>>
+        -> AllAccept<IO>
     {
         if let Some(acceptor) = accept {
-            InnerAccept::Fut(acceptor.accept(io).map(Stream::Tls))
+            AllAccept::Fut(acceptor.accept(io))
         } else {
-            InnerAccept::Socket(Some(io))
-        }
-    }
-
-    pub fn get_alpn_protocol(&self) -> Option<&[u8]> {
-        match self {
-            Stream::Socket(_) => None,
-            Stream::Tls(io) => {
-                let (_, session) = io.get_ref();
-                session.get_alpn_protocol()
-            }
-        }
-    }
-
-    pub fn is_sendable(&self) -> bool {
-        match self {
-            Stream::Socket(_) => true,
-            _ => false
+            AllAccept::Socket(Some(io))
         }
     }
 }
 
-impl<IO, Fut> Future for InnerAccept<IO, Fut>
-where Fut: Future<Item=Stream<IO>, Error=io::Error>
-{
-    type Item = Fut::Item;
-    type Error = Fut::Error;
+impl<IO: private::AsyncIO> Future for AllAccept<IO> {
+    type Output = io::Result<Stream<IO>>;
 
-    fn poll(&mut self) -> Poll<Self::Item, Self::Error> {
-        match self {
-            InnerAccept::Socket(io) => {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        match self.get_mut() {
+            AllAccept::Socket(io) => {
                 let io = io.take().unwrap();
-                Ok(Async::Ready(Stream::Socket(io)))
+                Poll::Ready(Ok(Stream::Socket(io)))
             },
-            InnerAccept::Fut(fut) => fut.poll()
+            AllAccept::Fut(fut) => Pin::new(fut).poll(cx).map_ok(Stream::Tls)
         }
     }
 }
 
-impl<IO> io::Read for Stream<IO>
-where IO: private::AsyncIO
-{
-    unsafe fn initializer(&self) -> Initializer {
-        match self {
-            Stream::Socket(io) => io.initializer(),
-            Stream::Tls(io) => io.initializer()
-        }
-    }
-
-    fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
-        match self {
-            Stream::Socket(io) => io.read(buf),
-            Stream::Tls(io) => io.read(buf)
-        }
-    }
-}
-
-impl<IO> io::Write for Stream<IO>
-where IO: private::AsyncIO
-{
-    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
-        match self {
-            Stream::Socket(io) => io.write(buf),
-            Stream::Tls(io) => io.write(buf)
-        }
-    }
-
-    fn flush(&mut self) -> io::Result<()> {
-        match self {
-            Stream::Socket(io) => io.flush(),
-            Stream::Tls(io) => io.flush()
-        }
-    }
-}
-
-impl<IO> AsyncRead for Stream<IO>
-where IO: private::AsyncIO
-{
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [u8]) -> bool {
+impl<IO: private::AsyncIO> AsyncRead for Stream<IO> {
+    #[inline]
+    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [MaybeUninit<u8>]) -> bool {
         match self {
             Stream::Socket(io) => io.prepare_uninitialized_buffer(buf),
             Stream::Tls(io) => io.prepare_uninitialized_buffer(buf)
         }
     }
 
-    fn read_buf<B: BufMut>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        match self {
-            Stream::Socket(io) => io.read_buf(buf),
-            Stream::Tls(io) => io.read_buf(buf)
+    #[inline]
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            Stream::Socket(io) => Pin::new(io).poll_read(cx, buf),
+            Stream::Tls(io) => Pin::new(io).poll_read(cx, buf)
+        }
+    }
+
+    #[inline]
+    fn poll_read_buf<B: BufMut>(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut B) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            Stream::Socket(io) => Pin::new(io).poll_read_buf(cx, buf),
+            Stream::Tls(io) => Pin::new(io).poll_read_buf(cx, buf)
         }
     }
 }
 
-impl<IO> AsyncWrite for Stream<IO>
-where IO: private::AsyncIO
-{
-    fn write_buf<B: Buf>(&mut self, buf: &mut B) -> Poll<usize, io::Error> {
-        match self {
-            Stream::Socket(io) => io.write_buf(buf),
-            Stream::Tls(io) => io.write_buf(buf)
+impl<IO: private::AsyncIO> AsyncWrite for Stream<IO> {
+    #[inline]
+    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            Stream::Socket(io) => Pin::new(io).poll_write(cx, buf),
+            Stream::Tls(io) => Pin::new(io).poll_write(cx, buf)
         }
     }
 
-    fn shutdown(&mut self) -> Poll<(), io::Error> {
-        match self {
-            Stream::Socket(io) => io.shutdown(),
-            Stream::Tls(io) => io.shutdown()
+    #[inline]
+    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            Stream::Socket(io) => Pin::new(io).poll_flush(cx),
+            Stream::Tls(io) => Pin::new(io).poll_flush(cx)
         }
     }
-}
 
-#[cfg(unix)]
-impl<IO: AsRawFd> AsRawFd for Stream<IO> {
-    fn as_raw_fd(&self) -> RawFd {
-        match self {
-            Stream::Socket(io) => io.as_raw_fd(),
-            Stream::Tls(io) => {
-                let (io, _) = io.get_ref();
-                io.as_raw_fd()
-            }
+    #[inline]
+    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<io::Result<()>> {
+        match self.get_mut() {
+            Stream::Socket(io) => Pin::new(io).poll_shutdown(cx),
+            Stream::Tls(io) => Pin::new(io).poll_shutdown(cx)
         }
     }
+
+    #[inline]
+    fn poll_write_buf<B: Buf>(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut B) -> Poll<io::Result<usize>> {
+        match self.get_mut() {
+            Stream::Socket(io) => Pin::new(io).poll_write_buf(cx, buf),
+            Stream::Tls(io) => Pin::new(io).poll_write_buf(cx, buf)
+        }
+    }
+
+
 }
 
 mod private {
     use super::*;
 
-    pub trait AsyncIO: AsyncRead + AsyncWrite {}
-    impl<T: AsyncRead + AsyncWrite> AsyncIO for T {}
+    pub trait AsyncIO: AsyncRead + AsyncWrite + Unpin {}
+    impl<T: AsyncRead + AsyncWrite + Unpin> AsyncIO for T {}
 }

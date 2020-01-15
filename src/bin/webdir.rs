@@ -4,10 +4,10 @@ use std::sync::Arc;
 use std::net::SocketAddr;
 use std::path::{ Path, PathBuf };
 use structopt::StructOpt;
-use failure::Fallible;
 use rustls::{ PrivateKey, Certificate, ServerConfig, NoClientAuth, Ticketer };
-use tokio::prelude::*;
+use futures::future::TryFutureExt;
 use tokio::net::TcpListener;
+use tokio::stream::StreamExt;
 use tokio_rustls::TlsAcceptor;
 use hyper::server::conn::Http;
 use slog::{ slog_o, Drain };
@@ -34,26 +34,27 @@ struct Options {
     pub https: Option<PathBuf>
 }
 
-fn load_cert_and_key(path: &Path) -> Fallible<(Vec<Certificate>, Vec<PrivateKey>)> {
+fn load_cert_and_key(path: &Path) -> anyhow::Result<(Vec<Certificate>, Vec<PrivateKey>)> {
     use rustls::internal::pemfile::{ certs, rsa_private_keys, pkcs8_private_keys };
 
     let mut reader = Cursor::new(fs::read(path)?);
 
     let cert = certs(&mut reader)
-        .map_err(|_| failure::err_msg("Bad certs"))?;
+        .map_err(|_| anyhow::format_err!("Bad certs"))?;
     reader.set_position(0);
     let mut key = rsa_private_keys(&mut reader)
-        .map_err(|_| failure::err_msg("Bad rsa privatek key"))?;
+        .map_err(|_| anyhow::format_err!("Bad rsa privatek key"))?;
     reader.set_position(0);
     let mut key2 = pkcs8_private_keys(&mut reader)
-        .map_err(|_| failure::err_msg("Bad pkcs8 privatek key"))?;
+        .map_err(|_| anyhow::format_err!("Bad pkcs8 privatek key"))?;
     key.append(&mut key2);
 
     Ok((cert, key))
 }
 
 
-fn main() -> Fallible<()> {
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
     let options = Options::from_args();
 
     let level = env::var("WEBDIR_LOG")
@@ -61,7 +62,7 @@ fn main() -> Fallible<()> {
         .map(String::as_str)
         .unwrap_or("INFO")
         .parse()
-        .map_err(|_| failure::err_msg("bad log level"))?;
+        .map_err(|_| anyhow::format_err!("bad log level"))?;
 
     let decorator = slog_term::TermDecorator::new().build();
     let drain = slog_term::CompactFormat::new(decorator).build().fuse();
@@ -79,7 +80,7 @@ fn main() -> Fallible<()> {
     let acceptor = if let Some(cert) = options.https.as_ref() {
         let (certs, mut keys) = load_cert_and_key(cert)?;
         let key = keys.pop()
-            .ok_or_else(|| failure::err_msg("not found keys"))?;
+            .ok_or_else(|| anyhow::format_err!("not found keys"))?;
 
         let mut config = ServerConfig::new(NoClientAuth::new());
         config.set_single_cert(certs, key)?;
@@ -91,31 +92,31 @@ fn main() -> Fallible<()> {
         None
     };
 
-    let listener = TcpListener::bind(&options.addr)?;
+    let webdir = WebDir::new(root, options.index)?;
+    let mut listener = TcpListener::bind(&options.addr).await?;
 
     info!("bind: {:?}", listener.local_addr());
 
-    let done = future::lazy(move || WebDir::new(root, options.index))
-        .and_then(move |webdir| {
-            listener.incoming().for_each(move |socket| {
-                info!("addr: {:?}", socket.peer_addr());
+    let mut incoming = listener.incoming();
+    while let Some(socket) = incoming.next().await {
+        let webdir = webdir.clone();
+        let acceptor = acceptor.clone();
 
-                let webdir = webdir.clone();
-                let fut = WebStream::new(socket, acceptor.clone())
-                    .map_err(failure::Error::from)
-                    .and_then(move |stream| Http::new()
-                        .serve_connection(stream, webdir)
-                        .map_err(Into::into)
-                    )
-                    .map(drop)
-                    .map_err(|err| error!("socket/err: {:?}", err));
+        let fut = async move {
+            let socket = socket?;
 
-                hyper::rt::spawn(fut);
-                Ok(())
-            })
-        })
-        .map_err(|err| error!("init/err: {:?}", err));
+            info!("addr: {:?}", socket.peer_addr());
 
-    hyper::rt::run(done);
+            let stream = WebStream::new(socket, acceptor).await?;
+
+            Http::new()
+                .serve_connection(stream, webdir).await?;
+
+            Ok(()) as anyhow::Result<()>
+        }.unwrap_or_else(|err| error!("socket/err: {:?}", err));
+
+        tokio::spawn(fut);
+    }
+
     Ok(())
 }

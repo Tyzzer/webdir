@@ -1,6 +1,6 @@
 [package]
 name = "webdir"
-version = "0.1.0"
+version = "0.1.1"
 authors = ["quininer kel <quininer@live.com>"]
 license = "MIT"
 edition = "2018"
@@ -18,38 +18,35 @@ doc = false
 
 [dependencies]
 serde = "1.0"
-structopt = "0.2"
-failure = "0.1"
-log = { version = "0.3", features = ["release_max_level_debug"] }
+structopt = "0.3"
+anyhow = "1"
+log = { version = "0.4", features = ["release_max_level_debug"] }
 slog = "2"
 slog-stdlog = "3.0.4-pre"
 slog-scope = "4"
 slog-term = "2"
 slog-async = "2"
 
-bytes = "0.4"
-tokio = "0.1"
-tokio-io = "0.1"
-hyper = "0.12"
-http = "0.1"
-headers = "0.2"
+futures = "0.3"
+bytes = "0.5"
+tokio = { version = "0.2", features = [ "rt-threaded", "io-util", "tcp", "time", "fs", "blocking", "stream", "macros" ] }
+hyper = { version = "0.13", features = [ "stream" ] }
+http = "0.2"
+headers = "0.3"
 
-rustls = { version = "0.15" }
-tokio-rustls = { version = "0.9.0", features = ["nightly"] }
+rustls = { version = "0.16" }
+tokio-rustls = { version = "0.12.0", features = ["unstable"] }
 
-percent-encoding = "1.0"
-chrono = "0.4"
-unbytify = "0.2"
+percent-encoding = "2"
+time = "0.2"
+bytesize = "1"
 byteorder = "1.0"
-humanesort = "0.1.0-alpha"
-base64 = "0.10"
+human-sort = "0.2"
+base64 = "0.11"
 siphasher = "0.3"
-smallvec = "0.6"
+smallvec = "1"
 mime = "0.3"
-mime_guess = "2.0.0-alpha"
-maud = "0.20"
-if_chain = "0.1"
-rand = "0.6"
-
-[target.'cfg(target_os = "linux")'.dependencies]
-tokio-linux-aio = "0.1"
+mime_guess = "2"
+maud = "0.21"
+if_chain = "1"
+rand = "0.7"
