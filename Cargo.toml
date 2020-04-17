@@ -22,7 +22,7 @@ structopt = "0.3"
 anyhow = "1"
 log = { version = "0.4", features = ["release_max_level_debug"] }
 slog = "2"
-slog-stdlog = "3.0.4-pre"
+slog-stdlog = "4"
 slog-scope = "4"
 slog-term = "2"
 slog-async = "2"
@@ -34,15 +34,15 @@ hyper = { version = "0.13", features = [ "stream" ] }
 http = "0.2"
 headers = "0.3"
 
-rustls = { version = "0.16" }
-tokio-rustls = { version = "0.12.0", features = ["unstable"] }
+rustls = { version = "0.17" }
+tokio-rustls = { version = "0.13.0", features = ["unstable"] }
 
 percent-encoding = "2"
 time = "0.2"
 bytesize = "1"
 byteorder = "1.0"
 human-sort = "0.2"
-base64 = "0.11"
+base64 = "0.12"
 siphasher = "0.3"
 smallvec = "1"
 mime = "0.3"

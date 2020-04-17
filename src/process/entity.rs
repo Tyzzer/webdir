@@ -3,6 +3,7 @@ use std::ops::{ Bound, Range };
 use std::path::Path;
 use std::fs::Metadata;
 use std::str::FromStr;
+use std::cell::RefCell;
 use smallvec::SmallVec;
 use rand::{ Rng, thread_rng, distributions::Alphanumeric };
 use log::*;
@@ -10,13 +11,15 @@ use hyper::{ StatusCode, Body };
 use http::HeaderMap;
 use headers::HeaderMapExt;
 use mime::Mime;
-use crate::common::err_html;
+use base64::{ URL_SAFE_NO_PAD, encode_config_buf };
+use crate::common::{ err_html, fs_hash };
 
 
 pub struct Entity<'a> {
     pub path: &'a Path,
     pub length: u64,
-    metadata: &'a Metadata
+    metadata: &'a Metadata,
+    etag: headers::ETag
 }
 
 pub struct Result(pub StatusCode, pub HeaderMap, pub Value);
@@ -30,8 +33,25 @@ pub enum Value {
 
 impl<'a> Entity<'a> {
     pub fn new(path: &'a Path, metadata: &'a Metadata) -> Self {
+        thread_local!{
+            static BUF: RefCell<String> = RefCell::new(String::with_capacity(1)); // TODO cap
+        }
+
+        let hash = fs_hash(metadata);
+
+        let etag = BUF.with(|buf| {
+            let mut buf = buf.borrow_mut();
+
+            buf.clear();
+            buf.push('"');
+            encode_config_buf(&hash.to_le_bytes(), URL_SAFE_NO_PAD, &mut buf);
+            buf.push('"');
+
+            buf.parse().unwrap()
+        });
+
         Entity {
-            path, metadata,
+            path, metadata, etag,
             length: metadata.len()
         }
     }
@@ -42,6 +62,8 @@ impl<'a> Entity<'a> {
         map.typed_insert(headers::AcceptRanges::bytes());
         let mime = mime_guess::from_path(self.path).first_or_octet_stream();
         map.typed_insert(headers::ContentType::from(mime));
+
+        map.typed_insert(self.etag.clone());
 
         if let Ok(date) = self.metadata.modified() {
             map.typed_insert(headers::LastModified::from(date));
@@ -67,7 +89,36 @@ impl<'a> Entity<'a> {
     }
 
     pub fn result(&self, map: &HeaderMap) -> Result {
-        // TODO check etag
+        // TODO check it
+
+        if let Some(ifmatch) = map.typed_get::<headers::IfMatch>() {
+            if !ifmatch.precondition_passes(&self.etag) {
+                return Result(
+                    StatusCode::PRECONDITION_FAILED,
+                    HeaderMap::new(),
+                    Value::Error(Body::from("Precondition failed"))
+                );
+            }
+        }
+
+        if let Some(ifrange) = map.typed_get::<headers::IfRange>() {
+            let mtime = self.metadata.modified()
+                .map(headers::LastModified::from)
+                .ok();
+            if ifrange.is_modified(Some(&self.etag), mtime.as_ref()) {
+                return Result(
+                    StatusCode::PRECONDITION_FAILED,
+                    HeaderMap::new(),
+                    Value::Error(Body::from("Precondition failed"))
+                );
+            }
+        }
+
+        if let Some(ifnonematch) = map.typed_get::<headers::IfNoneMatch>() {
+            if ifnonematch.precondition_passes(&self.etag) {
+                return not_modified(format_args!("etag: {:?}", &self.etag));
+            }
+        }
 
         if let Some(time) = map.typed_get::<headers::IfModifiedSince>() {
             if let Ok(time2) = self.metadata.modified() {

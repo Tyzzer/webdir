@@ -1,7 +1,9 @@
-use std::fmt;
+use std::{ fmt, fs };
 use std::ffi::OsStr;
 use std::ops::Add;
+use std::hash::Hasher;
 use std::path::{ Path, PathBuf, Component };
+use siphasher::sip::SipHasher;
 use percent_encoding::{ NON_ALPHANUMERIC, percent_encode, percent_decode };
 use maud::{ html, Markup };
 
@@ -70,4 +72,31 @@ pub fn decode_path(path: &str) -> PathBuf {
         .decode_utf8_lossy()
         .into_owned();
     PathBuf::from(path_buf)
+}
+
+
+#[cfg(unix)]
+pub fn fs_hash(metadata: &fs::Metadata) -> u64 {
+    use std::os::unix::fs::MetadataExt;
+
+    let mut hasher = SipHasher::default();
+    hasher.write_u64(metadata.size());
+    hasher.write_u64(metadata.ino());
+    hasher.write_i64(metadata.ctime());
+    hasher.write_i64(metadata.ctime_nsec());
+    hasher.write_i64(metadata.mtime());
+    hasher.write_i64(metadata.mtime_nsec());
+    hasher.finish()
+}
+
+#[cfg(windows)]
+pub fn fs_hash(metadata: &fs::Metadata) -> u64 {
+    use std::os::windows::fs::MetadataExt;
+
+    let mut hasher = SipHasher::default();
+    hasher.write_u32(metadata.file_attributes());
+    hasher.write_u64(metadata.creation_time());
+    hasher.write_u64(metadata.last_write_time());
+    hasher.write_u64(metadata.file_size());
+    hasher.finish()
 }

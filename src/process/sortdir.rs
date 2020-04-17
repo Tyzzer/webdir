@@ -5,7 +5,7 @@ use std::time::SystemTime;
 use std::fs::{ DirEntry, ReadDir, Metadata };
 use smallvec::SmallVec;
 use maud::{ html, Render, Markup };
-use time::PrimitiveDateTime;
+use time::OffsetDateTime;
 use human_sort::compare;
 use crate::common::encode_path;
 
@@ -120,11 +120,11 @@ impl Entry {
     }
 
     #[inline]
-    pub fn time(&self) -> io::Result<PrimitiveDateTime> {
+    pub fn time(&self) -> io::Result<OffsetDateTime> {
         let time = self.metadata.modified()?;
         let time = time.duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-        Ok(PrimitiveDateTime::from_unix_timestamp(time.as_secs() as _))
+        Ok(OffsetDateTime::from_unix_timestamp(time.as_secs() as _))
     }
 
     #[inline]
