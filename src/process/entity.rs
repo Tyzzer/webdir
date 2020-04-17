@@ -34,7 +34,7 @@ pub enum Value {
 impl<'a> Entity<'a> {
     pub fn new(path: &'a Path, metadata: &'a Metadata) -> Self {
         thread_local!{
-            static BUF: RefCell<String> = RefCell::new(String::with_capacity(1)); // TODO cap
+            static BUF: RefCell<String> = RefCell::new(String::with_capacity(16));
         }
 
         let hash = fs_hash(metadata);
