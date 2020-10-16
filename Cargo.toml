@@ -34,19 +34,19 @@ hyper = { version = "0.13", features = [ "stream" ] }
 http = "0.2"
 headers = "0.3"
 
-rustls = { version = "0.17" }
-tokio-rustls = { version = "0.13.0", features = ["unstable"] }
+rustls = { version = "0.18" }
+tokio-rustls = { version = "0.14", features = ["unstable"] }
 
 percent-encoding = "2"
 time = "0.2"
 bytesize = "1"
 byteorder = "1.0"
 human-sort = "0.2"
-base64 = "0.12"
+data-encoding = "2"
 siphasher = "0.3"
 smallvec = "1"
 mime = "0.3"
 mime_guess = "2"
-maud = "0.21"
+maud = "0.22"
 if_chain = "1"
 rand = "0.7"

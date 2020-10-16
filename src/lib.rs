@@ -8,7 +8,7 @@ mod process;
 use std::io;
 use std::task::{ Context, Poll };
 use std::sync::Arc;
-use std::path::PathBuf;
+use std::path::Path;
 use futures::future;
 use hyper::service::Service;
 use hyper::{ StatusCode, Request, Response, Body };
@@ -19,12 +19,12 @@ pub use crate::stream::Stream as WebStream;
 
 #[derive(Clone)]
 pub struct WebDir {
-    pub root: Arc<PathBuf>,
+    pub root: Arc<Path>,
     pub index: bool,
 }
 
 impl WebDir {
-    pub fn new(root: Arc<PathBuf>, index: bool) -> io::Result<Self> {
+    pub fn new(root: Arc<Path>, index: bool) -> io::Result<Self> {
         Ok(WebDir { root, index })
     }
 }

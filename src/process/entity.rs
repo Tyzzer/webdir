@@ -11,7 +11,7 @@ use hyper::{ StatusCode, Body };
 use http::HeaderMap;
 use headers::HeaderMapExt;
 use mime::Mime;
-use base64::{ URL_SAFE_NO_PAD, encode_config_buf };
+use data_encoding::BASE64URL_NOPAD;
 use crate::common::{ err_html, fs_hash };
 
 
@@ -44,7 +44,7 @@ impl<'a> Entity<'a> {
 
             buf.clear();
             buf.push('"');
-            encode_config_buf(&hash.to_le_bytes(), URL_SAFE_NO_PAD, &mut buf);
+            BASE64URL_NOPAD.encode_append(&hash.to_le_bytes(), &mut buf);
             buf.push('"');
 
             buf.parse().unwrap()
@@ -89,8 +89,6 @@ impl<'a> Entity<'a> {
     }
 
     pub fn result(&self, map: &HeaderMap) -> Result {
-        // TODO check it
-
         if let Some(ifmatch) = map.typed_get::<headers::IfMatch>() {
             if !ifmatch.precondition_passes(&self.etag) {
                 return Result(
@@ -115,7 +113,7 @@ impl<'a> Entity<'a> {
         }
 
         if let Some(ifnonematch) = map.typed_get::<headers::IfNoneMatch>() {
-            if ifnonematch.precondition_passes(&self.etag) {
+            if !ifnonematch.precondition_passes(&self.etag) {
                 return not_modified(format_args!("etag: {:?}", &self.etag));
             }
         }

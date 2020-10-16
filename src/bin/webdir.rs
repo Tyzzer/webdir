@@ -74,8 +74,8 @@ async fn main() -> anyhow::Result<()> {
     slog_stdlog::init()?;
 
     let root =
-        if let Some(ref p) = options.root { Arc::new(p.canonicalize()?) }
-        else { Arc::new(env::current_dir()?) };
+        if let Some(ref p) = options.root { Arc::from(&*p.canonicalize()?) }
+        else { Arc::from(&*env::current_dir()?) };
 
     let acceptor = if let Some(cert) = options.https.as_ref() {
         let (certs, mut keys) = load_cert_and_key(cert)?;

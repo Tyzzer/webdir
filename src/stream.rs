@@ -1,12 +1,11 @@
 use std::io;
 use std::pin::Pin;
 use std::marker::Unpin;
-use std::future::Future;
 use std::mem::MaybeUninit;
 use std::task::{ Context, Poll };
 use bytes::{ Buf, BufMut };
 use tokio::io::{ AsyncRead, AsyncWrite };
-use tokio_rustls::{ TlsAcceptor, Accept, server::TlsStream };
+use tokio_rustls::{ TlsAcceptor, server::TlsStream };
 
 
 pub enum Stream<IO> {
@@ -14,37 +13,14 @@ pub enum Stream<IO> {
     Tls(TlsStream<IO>)
 }
 
-pub enum AllAccept<IO> {
-    Socket(Option<IO>),
-    Fut(Accept<IO>)
-}
-
 impl<IO> Stream<IO>
 where IO: private::AsyncIO
 {
-    #[allow(clippy::new_ret_no_self)]
-    pub fn new(io: IO, accept: Option<TlsAcceptor>)
-        -> AllAccept<IO>
-    {
-        if let Some(acceptor) = accept {
-            AllAccept::Fut(acceptor.accept(io))
-        } else {
-            AllAccept::Socket(Some(io))
-        }
-    }
-}
-
-impl<IO: private::AsyncIO> Future for AllAccept<IO> {
-    type Output = io::Result<Stream<IO>>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match self.get_mut() {
-            AllAccept::Socket(io) => {
-                let io = io.take().unwrap();
-                Poll::Ready(Ok(Stream::Socket(io)))
-            },
-            AllAccept::Fut(fut) => Pin::new(fut).poll(cx).map_ok(Stream::Tls)
-        }
+    pub async fn new(io: IO, accept: Option<TlsAcceptor>) -> io::Result<Stream<IO>> {
+        Ok(match accept {
+            Some(acceptor) => Stream::Tls(acceptor.accept(io).await?),
+            None => Stream::Socket(io)
+        })
     }
 }
 

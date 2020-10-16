@@ -16,7 +16,6 @@ use headers::HeaderMapExt;
 use if_chain::if_chain;
 use maud::Render;
 use crate::WebDir;
-// use crate::file::{ ChunkReader, SenderSink, TryClone };
 use crate::common::{ path_canonicalize, decode_path, html_utf8 };
 use self::entity::Entity;
 use self::sortdir::{ up, SortDir };

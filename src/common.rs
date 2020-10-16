@@ -43,15 +43,21 @@ pub fn path_canonicalize<P: AsRef<Path>>(root: &Path, path: P) -> (usize, PathBu
 pub fn encode_path(name: &OsStr) -> String {
     use std::os::unix::ffi::OsStrExt;
 
+    let mut init = String::with_capacity(name.len() + 2);
+    init.push_str("./");
+
     percent_encode(name.as_bytes(), NON_ALPHANUMERIC)
-        .fold(String::from("./"), Add::add)
+        .fold(init, Add::add)
 }
 
 #[cfg(not(unix))]
 #[inline]
 pub fn encode_path(name: &OsStr) -> String {
+    let mut init = String::with_capacity(name.len() + 2);
+    init.push_str("./");
+
     percent_encode(name.to_string_lossy().as_bytes(), NON_ALPHANUMERIC)
-        .fold(String::from("./"), Add::add)
+        .fold(init, Add::add)
 }
 
 #[cfg(unix)]
