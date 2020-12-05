@@ -1,4 +1,4 @@
-#![feature(read_initializer, never_type, proc_macro_hygiene)]
+#![feature(never_type)]
 
 #[macro_use]
 mod common;

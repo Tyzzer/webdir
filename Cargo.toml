@@ -28,14 +28,13 @@ slog-term = "2"
 slog-async = "2"
 
 futures = "0.3"
-bytes = "0.5"
-tokio = { version = "0.2", features = [ "rt-threaded", "io-util", "tcp", "time", "fs", "blocking", "stream", "macros" ] }
-hyper = { version = "0.13", features = [ "stream" ] }
+bytes = "0.6"
+tokio = { version = "0.3", features = [ "rt-multi-thread", "io-util", "net", "time", "fs", "stream", "macros" ] }
+hyper = { version = "0.14.0-dev", git = "https://github.com/hyperium/hyper", features = [ "http1", "http2", "server", "runtime", "stream" ] }
 http = "0.2"
 headers = "0.3"
 
-rustls = { version = "0.18" }
-tokio-rustls = { version = "0.14", features = ["unstable"] }
+tokio-rustls = "0.21"
 
 percent-encoding = "2"
 time = "0.2"

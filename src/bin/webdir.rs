@@ -4,11 +4,11 @@ use std::sync::Arc;
 use std::net::SocketAddr;
 use std::path::{ Path, PathBuf };
 use structopt::StructOpt;
-use rustls::{ PrivateKey, Certificate, ServerConfig, NoClientAuth, Ticketer };
 use futures::future::TryFutureExt;
 use tokio::net::TcpListener;
 use tokio::stream::StreamExt;
 use tokio_rustls::TlsAcceptor;
+use tokio_rustls::rustls::{ PrivateKey, Certificate, ServerConfig, NoClientAuth, Ticketer };
 use hyper::server::conn::Http;
 use slog::{ slog_o, Drain };
 use log::*;
@@ -35,7 +35,7 @@ struct Options {
 }
 
 fn load_cert_and_key(path: &Path) -> anyhow::Result<(Vec<Certificate>, Vec<PrivateKey>)> {
-    use rustls::internal::pemfile::{ certs, rsa_private_keys, pkcs8_private_keys };
+    use tokio_rustls::rustls::internal::pemfile::{ certs, rsa_private_keys, pkcs8_private_keys };
 
     let mut reader = Cursor::new(fs::read(path)?);
 
@@ -97,15 +97,14 @@ async fn main() -> anyhow::Result<()> {
 
     info!("bind: {:?}", listener.local_addr());
 
-    let mut incoming = listener.incoming();
-    while let Some(socket) = incoming.next().await {
+    while let Some(result) = listener.next().await {
         let webdir = webdir.clone();
         let acceptor = acceptor.clone();
 
         let fut = async move {
-            let socket = socket?;
+            let socket = result?;
 
-            info!("addr: {:?}", socket.peer_addr());
+            info!("addr: {:?}", socket.peer_addr()?);
 
             let stream = WebStream::new(socket, acceptor).await?;
 

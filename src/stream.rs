@@ -1,10 +1,8 @@
-use std::io;
 use std::pin::Pin;
 use std::marker::Unpin;
-use std::mem::MaybeUninit;
+use std::io::{ self, IoSlice };
 use std::task::{ Context, Poll };
-use bytes::{ Buf, BufMut };
-use tokio::io::{ AsyncRead, AsyncWrite };
+use tokio::io::{ AsyncRead, AsyncWrite, ReadBuf };
 use tokio_rustls::{ TlsAcceptor, server::TlsStream };
 
 
@@ -26,26 +24,10 @@ where IO: private::AsyncIO
 
 impl<IO: private::AsyncIO> AsyncRead for Stream<IO> {
     #[inline]
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [MaybeUninit<u8>]) -> bool {
-        match self {
-            Stream::Socket(io) => io.prepare_uninitialized_buffer(buf),
-            Stream::Tls(io) => io.prepare_uninitialized_buffer(buf)
-        }
-    }
-
-    #[inline]
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<io::Result<usize>> {
+    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
             Stream::Socket(io) => Pin::new(io).poll_read(cx, buf),
             Stream::Tls(io) => Pin::new(io).poll_read(cx, buf)
-        }
-    }
-
-    #[inline]
-    fn poll_read_buf<B: BufMut>(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut B) -> Poll<io::Result<usize>> {
-        match self.get_mut() {
-            Stream::Socket(io) => Pin::new(io).poll_read_buf(cx, buf),
-            Stream::Tls(io) => Pin::new(io).poll_read_buf(cx, buf)
         }
     }
 }
@@ -76,14 +58,22 @@ impl<IO: private::AsyncIO> AsyncWrite for Stream<IO> {
     }
 
     #[inline]
-    fn poll_write_buf<B: Buf>(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut B) -> Poll<io::Result<usize>> {
+    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[IoSlice<'_>])
+        -> Poll<io::Result<usize>>
+    {
         match self.get_mut() {
-            Stream::Socket(io) => Pin::new(io).poll_write_buf(cx, buf),
-            Stream::Tls(io) => Pin::new(io).poll_write_buf(cx, buf)
+            Stream::Socket(io) => Pin::new(io).poll_write_vectored(cx, bufs),
+            Stream::Tls(io) => Pin::new(io).poll_write_vectored(cx, bufs)
         }
     }
 
-
+    #[inline]
+    fn is_write_vectored(&self) -> bool {
+        match &*self {
+            Stream::Socket(io) => io.is_write_vectored(),
+            Stream::Tls(io) => io.is_write_vectored()
+        }
+    }
 }
 
 mod private {
