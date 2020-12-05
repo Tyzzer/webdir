@@ -3,6 +3,7 @@
 #[macro_use]
 mod common;
 mod stream;
+mod file;
 mod process;
 
 use std::io;

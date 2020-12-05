@@ -9,13 +9,13 @@ use log::*;
 use futures::future::TryFutureExt;
 use bytes::Bytes;
 use tokio::prelude::*;
-use tokio::fs::File;
 use hyper::{ Request, Response, Method, Body, StatusCode };
 use http::HeaderMap;
 use headers::HeaderMapExt;
 use if_chain::if_chain;
 use maud::Render;
 use crate::WebDir;
+use crate::file::File;
 use crate::common::{ path_canonicalize, decode_path, html_utf8 };
 use self::entity::Entity;
 use self::sortdir::{ up, SortDir };
@@ -114,7 +114,7 @@ impl<'a> Process<'a> {
                 let length = entity.length;
 
                 let fut = async move {
-                    let mut fd = File::open(path).await?.take(0);
+                    let mut fd = File::open(&path).await?.take(0);
                     let mut buf = vec![0; 1 << 16];
 
                     for range in ranges {
@@ -178,7 +178,7 @@ impl<'a> Process<'a> {
 
         let fut = async move {
             let mut fd = {
-                let mut fd = File::open(path).await?;
+                let mut fd = File::open(&path).await?;
                 fd.seek(io::SeekFrom::Start(start)).await?;
                 fd.take(len)
             };

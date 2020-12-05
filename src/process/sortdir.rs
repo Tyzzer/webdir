@@ -3,6 +3,7 @@ use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::time::SystemTime;
 use std::fs::{ DirEntry, ReadDir, Metadata };
+use tokio::task::block_in_place;
 use smallvec::SmallVec;
 use maud::{ html, Render, Markup };
 use time::OffsetDateTime;
@@ -30,14 +31,15 @@ impl SortDir {
             }
         }
 
-        let mut buf = readdir
-            .by_ref()
-            .take(SORTDIR_BUFF_LENGTH)
-            .map(|entry| entry.and_then(Entry::new))
-            .collect::<SmallVec<_>>();
-        buf.sort_unstable_by(|x, y| sort_by_entry(y, x));
-
-        SortDir { readdir, buf }
+        block_in_place(move || {
+            let mut buf = readdir
+                .by_ref()
+                .take(SORTDIR_BUFF_LENGTH)
+                .map(|entry| entry.and_then(Entry::new))
+                .collect::<SmallVec<_>>();
+            buf.sort_unstable_by(|x, y| sort_by_entry(y, x));
+            SortDir { readdir, buf }
+        })
     }
 }
 
@@ -46,10 +48,11 @@ impl Iterator for SortDir {
 
     fn next(&mut self) -> Option<Self::Item> {
         self.buf.pop()
-            .or_else(|| self.readdir
-                .next()
-                .map(|entry| entry.and_then(Entry::new))
-            )
+            .or_else(|| block_in_place(|| {
+                self.readdir
+                    .next()
+                    .map(|entry| entry.and_then(Entry::new))
+            }))
     }
 }
 

@@ -1,6 +1,6 @@
 [package]
 name = "webdir"
-version = "0.1.1"
+version = "0.1.2"
 authors = ["quininer kel <quininer@live.com>"]
 license = "MIT"
 edition = "2018"
