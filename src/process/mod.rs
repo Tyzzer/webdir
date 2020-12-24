@@ -8,7 +8,7 @@ use std::fs::{ Metadata, ReadDir };
 use log::*;
 use futures::future::TryFutureExt;
 use bytes::Bytes;
-use tokio::prelude::*;
+use tokio::io::AsyncReadExt;
 use hyper::{ Request, Response, Method, Body, StatusCode };
 use http::HeaderMap;
 use headers::HeaderMapExt;

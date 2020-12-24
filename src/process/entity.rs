@@ -169,6 +169,7 @@ impl<'a> Entity<'a> {
             } else {
                 let boundary = thread_rng()
                     .sample_iter(&Alphanumeric)
+                    .map(char::from)
                     .take(12)
                     .collect::<String>();
                 let map = self.multipart_headers(&boundary);

@@ -6,7 +6,6 @@ use std::path::{ Path, PathBuf };
 use structopt::StructOpt;
 use futures::future::TryFutureExt;
 use tokio::net::TcpListener;
-use tokio::stream::StreamExt;
 use tokio_rustls::TlsAcceptor;
 use tokio_rustls::rustls::{ PrivateKey, Certificate, ServerConfig, NoClientAuth, Ticketer };
 use hyper::server::conn::Http;
@@ -93,18 +92,19 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let webdir = WebDir::new(root, options.index)?;
-    let mut listener = TcpListener::bind(&options.addr).await?;
+    let listener = TcpListener::bind(&options.addr).await?;
 
     info!("bind: {:?}", listener.local_addr());
 
-    while let Some(result) = listener.next().await {
+    loop {
+        let result = listener.accept().await;
         let webdir = webdir.clone();
         let acceptor = acceptor.clone();
 
         let fut = async move {
-            let socket = result?;
+            let (socket, addr) = result?;
 
-            info!("addr: {:?}", socket.peer_addr()?);
+            info!("addr: {:?}", addr);
 
             let stream = WebStream::new(socket, acceptor).await?;
 
@@ -116,6 +116,4 @@ async fn main() -> anyhow::Result<()> {
 
         tokio::spawn(fut);
     }
-
-    Ok(())
 }
