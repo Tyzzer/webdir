@@ -6,7 +6,7 @@ use ritsu::actions;
 
 
 pub struct File {
-    inner: ArcFile,
+    inner: Option<fs::File>,
     buf: Option<BytesMut>,
     pos: u64,
     len: u64
@@ -20,7 +20,7 @@ impl File {
 
         let len = fd.metadata()?.len();
         Ok(File {
-            inner: ArcFile(Arc::new(fd)),
+            inner: Some(fd),
             buf: Some(BytesMut::with_capacity(1 << 64)),
             pos: 0,
             len
@@ -48,12 +48,14 @@ impl File {
     pub async fn next_chunk(&mut self) -> io::Result<Option<Bytes>> {
         let handle = GLOBAL_HANDLE.get_or_init(init_ritsu_runtime);
 
-        let (_, mut buf) = actions::io::read_buf(
+        let (fd, mut buf) = actions::io::read_buf(
             handle,
-            &mut Some(self.inner.clone()),
+            &mut self.inner,
             self.buf.take().unwrap_or_else(|| BytesMut::with_capacity(1 << 16)),
             Some(self.pos as _)
         ).await?;
+
+        self.inner = Some(fd);
 
         Ok(if buf.is_empty() {
             None
@@ -104,19 +106,3 @@ fn init_ritsu_runtime() -> RemoteHandle {
 
     RemoteHandle(tx)
 }
-
-use std::sync::Arc;
-use std::os::unix::io::{ AsRawFd, RawFd };
-use ritsu::actions::io::TrustedAsRawFd;
-
-#[derive(Clone)]
-struct ArcFile(Arc<fs::File>);
-
-impl AsRawFd for ArcFile {
-    #[inline]
-    fn as_raw_fd(&self) -> RawFd {
-        self.0.as_raw_fd()
-    }
-}
-
-unsafe impl TrustedAsRawFd for ArcFile {}

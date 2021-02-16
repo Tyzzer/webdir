@@ -12,7 +12,7 @@ pub enum Stream<IO> {
 }
 
 impl<IO> Stream<IO>
-where IO: private::AsyncIO
+where IO: private::AsyncIo
 {
     pub async fn new(io: IO, accept: Option<TlsAcceptor>) -> io::Result<Stream<IO>> {
         Ok(match accept {
@@ -22,7 +22,7 @@ where IO: private::AsyncIO
     }
 }
 
-impl<IO: private::AsyncIO> AsyncRead for Stream<IO> {
+impl<IO: private::AsyncIo> AsyncRead for Stream<IO> {
     #[inline]
     fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut ReadBuf<'_>) -> Poll<io::Result<()>> {
         match self.get_mut() {
@@ -32,7 +32,7 @@ impl<IO: private::AsyncIO> AsyncRead for Stream<IO> {
     }
 }
 
-impl<IO: private::AsyncIO> AsyncWrite for Stream<IO> {
+impl<IO: private::AsyncIo> AsyncWrite for Stream<IO> {
     #[inline]
     fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<io::Result<usize>> {
         match self.get_mut() {
@@ -79,6 +79,6 @@ impl<IO: private::AsyncIO> AsyncWrite for Stream<IO> {
 mod private {
     use super::*;
 
-    pub trait AsyncIO: AsyncRead + AsyncWrite + Unpin {}
-    impl<T: AsyncRead + AsyncWrite + Unpin> AsyncIO for T {}
+    pub trait AsyncIo: AsyncRead + AsyncWrite + Unpin {}
+    impl<T: AsyncRead + AsyncWrite + Unpin> AsyncIo for T {}
 }
