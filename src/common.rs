@@ -1,11 +1,13 @@
-use std::{ fmt, fs };
+use std::{ fmt, fs, io };
 use std::ffi::OsStr;
 use std::ops::Add;
 use std::hash::Hasher;
 use std::path::{ Path, PathBuf, Component };
+use bytes::Bytes;
 use siphasher::sip::SipHasher;
 use percent_encoding::{ NON_ALPHANUMERIC, percent_encode, percent_decode };
 use maud::{ html, Markup };
+use crate::file::File;
 
 
 pub fn html_utf8() -> headers::ContentType {
@@ -105,4 +107,36 @@ pub fn fs_hash(metadata: &fs::Metadata) -> u64 {
     hasher.write_u64(metadata.last_write_time());
     hasher.write_u64(metadata.file_size());
     hasher.finish()
+}
+
+pub struct LimitFile<'a> {
+    inner: &'a mut File,
+    curr: u64,
+    limit: u64
+}
+
+impl LimitFile<'_> {
+    pub fn new(fd: &mut File, limit: u64) -> LimitFile<'_> {
+        LimitFile {
+            inner: fd,
+            curr: 0,
+            limit
+        }
+    }
+
+    pub async fn next_chunk(&mut self) -> io::Result<Option<Bytes>> {
+        Ok(if let Some(buf) = self.inner.next_chunk().await? {
+            Some(if self.curr + (buf.len() as u64) > self.limit {
+                let len = self.limit - self.curr;
+                let buf = buf.slice(..len as usize);
+                self.curr += len;
+                buf
+            } else {
+                self.curr += buf.len() as u64;
+                buf
+            })
+        } else {
+            None
+        })
+    }
 }

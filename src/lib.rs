@@ -3,8 +3,10 @@
 #[macro_use]
 mod common;
 mod stream;
-mod file;
 mod process;
+
+#[cfg_attr(target_os = "linux", path = "linux_file.rs")]
+mod file;
 
 use std::io;
 use std::task::{ Context, Poll };

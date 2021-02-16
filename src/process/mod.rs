@@ -8,7 +8,6 @@ use std::fs::{ Metadata, ReadDir };
 use log::*;
 use futures::future::TryFutureExt;
 use bytes::Bytes;
-use tokio::io::AsyncReadExt;
 use hyper::{ Request, Response, Method, Body, StatusCode };
 use http::HeaderMap;
 use headers::HeaderMapExt;
@@ -16,7 +15,7 @@ use if_chain::if_chain;
 use maud::Render;
 use crate::WebDir;
 use crate::file::File;
-use crate::common::{ path_canonicalize, decode_path, html_utf8 };
+use crate::common::{ path_canonicalize, decode_path, html_utf8, LimitFile };
 use self::entity::Entity;
 use self::sortdir::{ up, SortDir };
 
@@ -114,8 +113,7 @@ impl<'a> Process<'a> {
                 let length = entity.length;
 
                 let fut = async move {
-                    let mut fd = File::open(&path).await?.take(0);
-                    let mut buf = vec![0; 1 << 16];
+                    let mut fd = File::open(&path).await?;
 
                     for range in ranges {
                         let mut map = HeaderMap::new();
@@ -135,15 +133,12 @@ impl<'a> Process<'a> {
 
                         let start = range.start;
                         let len = range.end - range.start;
-                        fd.get_mut().seek(io::SeekFrom::Start(start)).await?;
-                        fd.set_limit(len);
+                        fd.seek(io::SeekFrom::Start(start)).await?;
+                        let mut fd = LimitFile::new(&mut fd, len);
 
                         sender.send_data(Bytes::from(headers)).await?;
-                        loop {
-                            match fd.read(&mut buf).await? {
-                                0 => break,
-                                n => sender.send_data(Bytes::from(Vec::from(&buf[..n]))).await?
-                            }
+                        while let Some(buf) = fd.next_chunk().await? {
+                            sender.send_data(buf).await?;
                         }
                         sender.send_data(Bytes::from_static(b"\r\n")).await?;
                     }
@@ -180,15 +175,12 @@ impl<'a> Process<'a> {
             let mut fd = {
                 let mut fd = File::open(&path).await?;
                 fd.seek(io::SeekFrom::Start(start)).await?;
-                fd.take(len)
+                fd
             };
-            let mut buf = vec![0; 1 << 16];
+            let mut fd = LimitFile::new(&mut fd, len);
 
-            loop {
-                match fd.read(&mut buf).await? {
-                    0 => break,
-                    n => sender.send_data(Bytes::from(Vec::from(&buf[..n]))).await?
-                }
+            while let Some(buf) = fd.next_chunk().await? {
+                sender.send_data(buf).await?;
             }
 
             Ok(()) as anyhow::Result<()>
