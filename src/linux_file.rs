@@ -82,7 +82,7 @@ struct RemoteHandle(UnboundedSender<squeue::Entry>);
 
 impl Handle for RemoteHandle {
     unsafe fn push(&self, entry: squeue::Entry) {
-        let _ = self.0.send(entry);
+        self.0.send(entry).ok().expect("ritsu runtime not found");
     }
 }
 
