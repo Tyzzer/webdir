@@ -16,11 +16,7 @@ impl File {
     pub async fn open(path: &Path) -> io::Result<File> {
         let handle = GLOBAL_HANDLE.get_or_init(init_ritsu_runtime);
 
-        dbg!("open");
-
         let fd = actions::fs::open(handle, path).await?;
-
-        dbg!("open ok");
 
         let len = fd.metadata()?.len();
         Ok(File {
@@ -52,8 +48,6 @@ impl File {
     pub async fn next_chunk(&mut self) -> io::Result<Option<Bytes>> {
         let handle = GLOBAL_HANDLE.get_or_init(init_ritsu_runtime);
 
-        dbg!("next chunk");
-
         let (_, mut buf) = actions::io::read_buf(
             handle,
             &mut Some(self.inner.clone()),
@@ -61,15 +55,13 @@ impl File {
             Some(self.pos as _)
         ).await?;
 
-        dbg!("next chunk ok");
-
         Ok(if buf.is_empty() {
             None
         } else {
             self.pos += buf.len() as u64;
             let buf2 = buf.split();
 
-            if buf.capacity() > 1024 {
+            if buf.capacity() > 64 {
                 self.buf = Some(buf);
             }
 
@@ -103,8 +95,6 @@ fn init_ritsu_runtime() -> RemoteHandle {
 
         proactor.block_on(async move {
             while let Some(entry) = rx.recv().await {
-                dbg!("process");
-
                 unsafe {
                     handle.push(entry);
                 }
