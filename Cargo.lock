@@ -864,6 +864,7 @@ dependencies = [
 [[package]]
 name = "ritsu"
 version = "0.1.0"
+source = "git+https://github.com/quininer/ritsu#fb8557bc6e64e8e70d48a54d5c018db221bc1690"
 dependencies = [
  "bitflags",
  "bytes",
