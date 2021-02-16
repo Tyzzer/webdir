@@ -17,11 +17,11 @@ impl File {
         let handle = GLOBAL_HANDLE.get_or_init(init_ritsu_runtime);
 
         let fd = actions::fs::open(handle, path).await?;
-
         let len = fd.metadata()?.len();
+
         Ok(File {
             inner: Some(fd),
-            buf: Some(BytesMut::with_capacity(1 << 64)),
+            buf: Some(BytesMut::with_capacity(1 << 16)),
             pos: 0,
             len
         })
