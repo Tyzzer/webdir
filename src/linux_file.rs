@@ -83,8 +83,9 @@ static GLOBAL_HANDLE: OnceCell<RemoteHandle> = OnceCell::new();
 struct RemoteHandle(UnboundedSender<squeue::Entry>);
 
 impl Handle for RemoteHandle {
-    unsafe fn push(&self, entry: squeue::Entry) {
+    unsafe fn push(&self, entry: squeue::Entry) -> io::Result<()> {
         self.0.send(entry).ok().expect("ritsu runtime not found");
+        Ok(())
     }
 }
 
@@ -98,7 +99,7 @@ fn init_ritsu_runtime() -> RemoteHandle {
         proactor.block_on(async move {
             while let Some(entry) = rx.recv().await {
                 unsafe {
-                    handle.push(entry);
+                    handle.push(entry).unwrap();
                 }
             }
         }).unwrap();

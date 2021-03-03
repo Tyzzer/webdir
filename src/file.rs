@@ -31,7 +31,7 @@ impl File {
             Ok(if n == 0 {
                 None
             } else {
-                Some(Bytes::from(&self.buf[..n]))
+                Some(Bytes::copy_from_slice(&self.buf[..n]))
             })
         })
     }

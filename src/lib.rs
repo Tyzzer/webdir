@@ -5,7 +5,7 @@ mod common;
 mod stream;
 mod process;
 
-#[cfg_attr(target_os = "linux", path = "linux_file.rs")]
+#[cfg_attr(all(target_os = "linux", feature = "io-uring-file"), path = "linux_file.rs")]
 mod file;
 
 use std::io;
