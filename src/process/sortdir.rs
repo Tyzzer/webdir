@@ -1,4 +1,5 @@
 use std::{ io, fmt };
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::ffi::OsString;
 use std::time::SystemTime;
@@ -127,7 +128,9 @@ impl Entry {
         let time = self.metadata.modified()?;
         let time = time.duration_since(SystemTime::UNIX_EPOCH)
             .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
-        Ok(OffsetDateTime::from_unix_timestamp(time.as_secs() as _))
+        OffsetDateTime::from_unix_timestamp(time.as_secs() as _)
+            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+
     }
 
     #[inline]
@@ -138,6 +141,8 @@ impl Entry {
 
 impl Render for Entry {
     fn render(&self) -> Markup {
+        use time::format_description::well_known::Rfc3339;
+
         html!{
             tr {
                 td class="icon" { (self.ty) }
@@ -149,7 +154,12 @@ impl Render for Entry {
                 td class="time" {
                     small {
                         @if let Ok(time) = self.time() {
-                            (time.format("%F %T UTC"))
+                            (
+                                time.format(&Rfc3339)
+                                    .ok()
+                                    .map(Cow::Owned)
+                                    .unwrap_or(Cow::Borrowed("-"))
+                            )
                         } @else {
                             "-"
                         }

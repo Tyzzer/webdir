@@ -37,9 +37,8 @@ tokio-rustls = "0.26"
 rustls-pemfile = "2"
 
 percent-encoding = "2"
-time = "0.2"
+time = { version = "0.3", features = [ "formatting" ] }
 bytesize = "1"
-byteorder = "1.0"
 human-sort = "0.2"
 data-encoding = "2"
 siphasher = "1"
