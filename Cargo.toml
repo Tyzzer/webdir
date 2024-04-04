@@ -28,7 +28,7 @@ hyper-util = { version = "0.1", features = [ "tokio", "http1", "http2", "server"
 http = "1"
 headers = "0.4"
 
-tokio-rustls = "0.26"
+tokio-rustls = { version = "0.26", default-features = false, features = [ "tls12", "ring" ] }
 rustls-pemfile = "2"
 
 percent-encoding = "2"
