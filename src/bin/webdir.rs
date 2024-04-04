@@ -11,8 +11,7 @@ use tokio_rustls::TlsAcceptor;
 use tokio_rustls::rustls::ServerConfig;
 use tokio_rustls::rustls::pki_types::{ CertificateDer, PrivateKeyDer };
 use hyper_util::server::conn::auto::Builder as HttpBuilder;
-use slog::{ slog_o, Drain };
-use log::*;
+use tracing::{ info, error };
 use webdir::{ WebDir, WebStream };
 
 
@@ -58,21 +57,9 @@ fn load_cert_and_key(path: &Path)
 async fn main() -> anyhow::Result<()> {
     let options: Options = argh::from_env();
 
-    let level = env::var("WEBDIR_LOG")
-        .as_ref()
-        .map(String::as_str)
-        .unwrap_or("INFO")
-        .parse()
-        .map_err(|_| anyhow::format_err!("bad log level"))?;
-
-    let decorator = slog_term::TermDecorator::new().build();
-    let drain = slog_term::CompactFormat::new(decorator).build().fuse();
-    let drain = slog::LevelFilter::new(drain, level).fuse();
-    let drain = slog_async::Async::new(drain).build().fuse();
-    let logger = slog::Logger::root(drain, slog_o!("version" => env!("CARGO_PKG_VERSION")));
-
-    let _scope_guard = slog_scope::set_global_logger(logger);
-    slog_stdlog::init()?;
+    tracing_subscriber::fmt()
+        .compact()
+        .init();
 
     let root =
         if let Some(ref p) = options.root { Arc::from(&*p.canonicalize()?) }
@@ -115,7 +102,7 @@ async fn main() -> anyhow::Result<()> {
         let fut = async move {
             let (socket, addr) = result?;
 
-            info!("addr: {:?}", addr);
+            info!(?addr, "peer");
 
             let stream = WebStream::new(socket, acceptor).await?;
             let stream = hyper_util::rt::tokio::TokioIo::new(stream);
@@ -123,10 +110,10 @@ async fn main() -> anyhow::Result<()> {
             http_builder
                 .serve_connection(stream, webdir)
                 .await
-                .map_err(|err| anyhow::format_err!("http serve error: {:?}", err))?;
+                .map_err(|err| anyhow::format_err!("http serve: {:?}", err))?;
 
             Ok(()) as anyhow::Result<()>
-        }.unwrap_or_else(|err| error!("socket/err: {:?}", err));
+        }.unwrap_or_else(|err| error!(?err, "socket/err"));
 
         tokio::spawn(fut);
     }

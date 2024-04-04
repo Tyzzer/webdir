@@ -9,7 +9,7 @@ use smallvec::SmallVec;
 use maud::{ html, Render, Markup };
 use time::OffsetDateTime;
 use human_sort::compare;
-use crate::common::encode_path;
+use crate::utils::encode_path;
 
 
 pub const SORTDIR_BUFF_LENGTH: usize = 1 << 12;

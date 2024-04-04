@@ -1,7 +1,10 @@
 #![feature(never_type)]
 
 #[macro_use]
-mod common;
+extern crate tracing;
+
+#[macro_use]
+mod utils;
 mod stream;
 mod process;
 mod file;
@@ -14,10 +17,9 @@ use futures::future;
 use hyper::body::Incoming;
 use hyper::service::Service;
 use hyper::{ StatusCode, Request, Response};
-use log::*;
 use crate::body::ResponseBody as Body;
 use crate::process::Process;
-use crate::common::err_html;
+use crate::utils::err_html;
 pub use crate::stream::Stream as WebStream;
 
 #[derive(Clone)]
@@ -38,8 +40,8 @@ impl Service<Request<Incoming>> for WebDir {
     type Future = future::Ready<Result<Response<Body>, Self::Error>>;
 
     fn call(&self, req: Request<Incoming>) -> Self::Future {
-        info!("request: {} {}", req.method(), req.uri().path());
-        debug!("request: {:?}", req.headers());
+        info!(method=%req.method(), path=%req.uri().path(), "request");
+        debug!(headers=?req.headers(), "request headers");
 
         match Process::new(self, req).process() {
             Ok(resp) => future::ok(resp),

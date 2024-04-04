@@ -5,7 +5,6 @@ use std::io;
 use std::ops::Range;
 use std::path::PathBuf;
 use std::fs::{ Metadata, ReadDir };
-use log::*;
 use futures::future::TryFutureExt;
 use bytes::Bytes;
 use hyper::{ Request, Response, Method, StatusCode };
@@ -17,7 +16,7 @@ use maud::Render;
 use crate::WebDir;
 use crate::file::File;
 use crate::body::ResponseBody as Body;
-use crate::common::{ path_canonicalize, decode_path, html_utf8, LimitFile };
+use crate::utils::{ path_canonicalize, decode_path, html_utf8, LimitFile };
 use self::entity::Entity;
 use self::sortdir::{ up, SortDir };
 
@@ -67,7 +66,7 @@ impl<'a> Process<'a> {
 
         let (mut sender, body) = Body::channel(None);
 
-        debug!("send/dir: {}", is_top);
+        debug!(hint=%is_top, "send/dir");
 
         let fut = async move {
             sender.send_data(Bytes::from_static(HTML_HEADER.as_bytes())).await?;
@@ -79,7 +78,7 @@ impl<'a> Process<'a> {
             sender.send_data(Bytes::from_static(HTML_FOOTER.as_bytes())).await?;
 
             Ok(()) as anyhow::Result<()>
-        }.unwrap_or_else(|err| error!("send/dir: {:?}", err));
+        }.unwrap_or_else(|err| error!(?err, "send/dir"));
 
         tokio::spawn(fut);
 
@@ -131,7 +130,7 @@ impl<'a> Process<'a> {
                         }
                         headers.extend_from_slice(b"\r\n");
 
-                        debug!("send/multipart: {:?}", range);
+                        debug!(?range, "send/multipart");
 
                         let start = range.start;
                         let len = range.end - range.start;
@@ -148,7 +147,7 @@ impl<'a> Process<'a> {
                     sender.send_data(Bytes::from(boundary2)).await?;
 
                     Ok(()) as anyhow::Result<()>
-                }.unwrap_or_else(|err| error!("send/multipart: {:?}", err));
+                }.unwrap_or_else(|err| error!(?err, "send/multipart"));
 
                 tokio::spawn(fut);
                 Response::new(body)
@@ -165,7 +164,7 @@ impl<'a> Process<'a> {
             return Body::empty();
         }
 
-        debug!("send/chunk: {:?}", range);
+        debug!(?range, "send/chunk");
 
         let path = entity.path.to_owned();
         let range = range.unwrap_or(0..entity.length);
@@ -186,7 +185,7 @@ impl<'a> Process<'a> {
             }
 
             Ok(()) as anyhow::Result<()>
-        }.unwrap_or_else(|err| error!("send/chunk: {:?}", err));
+        }.unwrap_or_else(|err| error!(?err, "send/chunk"));
 
         tokio::spawn(fut);
         body

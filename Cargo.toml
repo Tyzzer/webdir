@@ -17,12 +17,8 @@ doc = false
 [dependencies]
 argh = "0.1"
 anyhow = "1"
-log = { version = "0.4", features = ["release_max_level_debug"] }
-slog = "2"
-slog-stdlog = "4"
-slog-scope = "4"
-slog-term = "2"
-slog-async = "2"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = [ "env-filter", "fmt", "ansi" ] }
 
 futures = "0.3"
 bytes = "1"

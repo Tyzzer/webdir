@@ -6,14 +6,13 @@ use std::str::FromStr;
 use std::cell::RefCell;
 use smallvec::SmallVec;
 use rand::{ Rng, thread_rng, distributions::Alphanumeric };
-use log::*;
 use bytes::Bytes;
 use hyper::StatusCode;
 use http::HeaderMap;
 use headers::HeaderMapExt;
 use mime::Mime;
 use data_encoding::BASE64URL_NOPAD;
-use crate::common::{ err_html, fs_hash };
+use crate::utils::{ err_html, fs_hash };
 
 
 pub struct Entity<'a> {
@@ -185,10 +184,10 @@ impl<'a> Entity<'a> {
 }
 
 
-pub fn not_modified(display: fmt::Arguments) -> Result {
-    debug!("send/cache: {}", display);
+pub fn not_modified(dis: fmt::Arguments) -> Result {
+    debug!(msg=%dis, "send/cache");
 
     let map = HeaderMap::new();
-    let body = err_html(format_args!("Not Modified: {}", display)).into_string();
+    let body = err_html(format_args!("Not Modified: {}", dis)).into_string();
     Result(StatusCode::NOT_MODIFIED, map, Value::Error(Bytes::from(body)))
 }
