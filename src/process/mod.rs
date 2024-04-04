@@ -8,13 +8,15 @@ use std::fs::{ Metadata, ReadDir };
 use log::*;
 use futures::future::TryFutureExt;
 use bytes::Bytes;
-use hyper::{ Request, Response, Method, Body, StatusCode };
+use hyper::{ Request, Response, Method, StatusCode };
+use hyper::body::Incoming;
 use http::HeaderMap;
 use headers::HeaderMapExt;
 use if_chain::if_chain;
 use maud::Render;
 use crate::WebDir;
 use crate::file::File;
+use crate::body::ResponseBody as Body;
 use crate::common::{ path_canonicalize, decode_path, html_utf8, LimitFile };
 use self::entity::Entity;
 use self::sortdir::{ up, SortDir };
@@ -22,11 +24,11 @@ use self::sortdir::{ up, SortDir };
 
 pub struct Process<'a> {
     webdir: &'a WebDir,
-    req: Request<Body>
+    req: Request<Incoming>
 }
 
 impl<'a> Process<'a> {
-    pub fn new(webdir: &'a WebDir, req: Request<Body>) -> Process<'a> {
+    pub fn new(webdir: &'a WebDir, req: Request<Incoming>) -> Process<'a> {
         Process { webdir, req }
     }
 
@@ -63,7 +65,7 @@ impl<'a> Process<'a> {
         </style></head><body><table><tbody>";
         const HTML_FOOTER: &str = "</tbody></table></body></html>";
 
-        let (mut sender, body) = Body::channel();
+        let (mut sender, body) = Body::channel(None);
 
         debug!("send/dir: {}", is_top);
 
@@ -95,7 +97,7 @@ impl<'a> Process<'a> {
         let mut resp = match value {
             entity::Value::Error(err) => {
                 map.typed_insert(html_utf8());
-                Response::new(err)
+                Response::new(Body::one(err))
             },
             entity::Value::None => Response::new(self.sendchunk(&entity, None)),
             entity::Value::Range(range) => Response::new(self.sendchunk(&entity, Some(range))),
@@ -108,9 +110,9 @@ impl<'a> Process<'a> {
                 let boundary1 = format!("--{}\r\n", boundary);
                 let boundary2 = format!("--{}--", boundary);
 
-                let (mut sender, body) = Body::channel();
                 let path = entity.path.to_owned();
                 let length = entity.length;
+                let (mut sender, body) = Body::channel(None);
 
                 let fut = async move {
                     let mut fd = File::open(&path).await?;
@@ -169,7 +171,7 @@ impl<'a> Process<'a> {
         let range = range.unwrap_or(0..entity.length);
         let start = range.start;
         let len = range.end - range.start;
-        let (mut sender, body) = Body::channel();
+        let (mut sender, body) = Body::channel(Some(len as u64));
 
         let fut = async move {
             let mut fd = {

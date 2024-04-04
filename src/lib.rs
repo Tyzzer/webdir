@@ -4,18 +4,18 @@
 mod common;
 mod stream;
 mod process;
-
-#[cfg_attr(all(target_os = "linux", feature = "io-uring-file"), path = "linux_file.rs")]
 mod file;
+mod body;
 
 use std::io;
-use std::task::{ Context, Poll };
 use std::sync::Arc;
 use std::path::Path;
 use futures::future;
+use hyper::body::Incoming;
 use hyper::service::Service;
-use hyper::{ StatusCode, Request, Response, Body };
+use hyper::{ StatusCode, Request, Response};
 use log::*;
+use crate::body::ResponseBody as Body;
 use crate::process::Process;
 use crate::common::err_html;
 pub use crate::stream::Stream as WebStream;
@@ -32,16 +32,12 @@ impl WebDir {
     }
 }
 
-impl Service<Request<Body>> for WebDir {
+impl Service<Request<Incoming>> for WebDir {
     type Response = Response<Body>;
     type Error = !;
     type Future = future::Ready<Result<Response<Body>, Self::Error>>;
 
-    fn poll_ready(&mut self, _cx: &mut Context) -> Poll<Result<(), Self::Error>> {
-        Poll::Ready(Ok(()))
-    }
-
-    fn call(&mut self, req: Request<Body>) -> Self::Future {
+    fn call(&self, req: Request<Incoming>) -> Self::Future {
         info!("request: {} {}", req.method(), req.uri().path());
         debug!("request: {:?}", req.headers());
 
@@ -49,7 +45,7 @@ impl Service<Request<Body>> for WebDir {
             Ok(resp) => future::ok(resp),
             Err(err) => {
                 let body = err_html(format_args!("{:?}", err)).into_string();
-                let mut resp = Response::new(Body::from(body));
+                let mut resp = Response::new(Body::one(body.into()));
 
                 match err.kind() {
                     io::ErrorKind::NotFound => *resp.status_mut() =  StatusCode::NOT_FOUND,

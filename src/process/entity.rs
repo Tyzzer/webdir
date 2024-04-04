@@ -7,7 +7,8 @@ use std::cell::RefCell;
 use smallvec::SmallVec;
 use rand::{ Rng, thread_rng, distributions::Alphanumeric };
 use log::*;
-use hyper::{ StatusCode, Body };
+use bytes::Bytes;
+use hyper::StatusCode;
 use http::HeaderMap;
 use headers::HeaderMapExt;
 use mime::Mime;
@@ -25,7 +26,7 @@ pub struct Entity<'a> {
 pub struct Result(pub StatusCode, pub HeaderMap, pub Value);
 
 pub enum Value {
-    Error(Body),
+    Error(Bytes),
     None,
     Range(Range<u64>),
     Multipart(String, Vec<Range<u64>>)
@@ -94,7 +95,7 @@ impl<'a> Entity<'a> {
                 return Result(
                     StatusCode::PRECONDITION_FAILED,
                     HeaderMap::new(),
-                    Value::Error(Body::from("Precondition failed"))
+                    Value::Error(Bytes::from("Precondition failed"))
                 );
             }
         }
@@ -107,7 +108,7 @@ impl<'a> Entity<'a> {
                 return Result(
                     StatusCode::PRECONDITION_FAILED,
                     HeaderMap::new(),
-                    Value::Error(Body::from("Precondition failed"))
+                    Value::Error(Bytes::from("Precondition failed"))
                 );
             }
         }
@@ -130,7 +131,7 @@ impl<'a> Entity<'a> {
             let length = self.length;
 
             let mut vec = ranges
-                .iter()
+                .satisfiable_ranges(length)
                 .filter_map(|(start, end)| {
                     let start = match start {
                         Bound::Excluded(x) | Bound::Included(x) => x,
@@ -158,7 +159,7 @@ impl<'a> Entity<'a> {
                 Result(
                     StatusCode::RANGE_NOT_SATISFIABLE,
                     map,
-                    Value::Error(Body::from("Bad Range"))
+                    Value::Error(Bytes::from("Bad Range"))
                 )
             } else if vec.len() == 1 {
                 let mut map = self.headers();
@@ -189,5 +190,5 @@ pub fn not_modified(display: fmt::Arguments) -> Result {
 
     let map = HeaderMap::new();
     let body = err_html(format_args!("Not Modified: {}", display)).into_string();
-    Result(StatusCode::NOT_MODIFIED, map, Value::Error(Body::from(body)))
+    Result(StatusCode::NOT_MODIFIED, map, Value::Error(Bytes::from(body)))
 }
