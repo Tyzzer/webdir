@@ -3,7 +3,7 @@ use std::io::Cursor;
 use std::sync::Arc;
 use std::net::SocketAddr;
 use std::path::{ Path, PathBuf };
-use structopt::StructOpt;
+use argh::FromArgs;
 use anyhow::Context;
 use futures::future::TryFutureExt;
 use tokio::net::TcpListener;
@@ -16,22 +16,23 @@ use log::*;
 use webdir::{ WebDir, WebStream };
 
 
-#[derive(StructOpt)]
+/// WebDir -- simple web file server
+#[derive(FromArgs)]
 struct Options {
     /// bind address
-    #[structopt(short="b", long="bind")]
-    pub addr: SocketAddr,
+    #[argh(option, short = 'b')]
+    pub bind: SocketAddr,
 
     /// root path
-    #[structopt(short="r", long="root", display_order=2, parse(from_os_str))]
+    #[argh(option, short = 'r')]
     pub root: Option<PathBuf>,
 
     /// index
-    #[structopt(short="i", long="index", display_order=3)]
+    #[argh(switch, short = 'i')]
     pub index: bool,
 
     /// enable HTTPS
-    #[structopt(long="https", parse(from_os_str))]
+    #[argh(option)]
     pub https: Option<PathBuf>
 }
 
@@ -55,7 +56,7 @@ fn load_cert_and_key(path: &Path)
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    let options = Options::from_args();
+    let options: Options = argh::from_env();
 
     let level = env::var("WEBDIR_LOG")
         .as_ref()
@@ -90,7 +91,7 @@ async fn main() -> anyhow::Result<()> {
     };
 
     let webdir = WebDir::new(root, options.index)?;
-    let listener = TcpListener::bind(&options.addr).await?;
+    let listener = TcpListener::bind(&options.bind).await?;
     let mut http_builder = HttpBuilder::new(hyper_util::rt::tokio::TokioExecutor::new());
     http_builder
         .http1()
