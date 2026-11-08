@@ -1,5 +1,5 @@
 # webdir
-[![travis-ci](https://travis-ci.org/Tyzzer/webdir.svg?branch=master)](https://travis-ci.org/Tyzzer/webdir)
+[![ci](https://github.com/Tyzzer/webdir/actions/workflows/ci.yml/badge.svg)](https://github.com/Tyzzer/webdir/actions/workflows/ci.yml)
 [![license](https://img.shields.io/github/license/Tyzzer/webdir.svg)](https://github.com/Tyzzer/webdir/blob/master/LICENSE)
 
 
