@@ -22,7 +22,7 @@ pub struct SortDir {
 impl SortDir {
     pub fn new(mut readdir: ReadDir) -> Self {
         fn sort_by_entry(x: &io::Result<Entry>, y: &io::Result<Entry>) -> Ordering {
-            if let (&Ok(ref x), &Ok(ref y)) = (x, y) {
+            if let (Ok(x), Ok(y)) = (x, y) {
                 match Ord::cmp(&x.ty, &y.ty) {
                     Ordering::Equal => compare(&x.name.to_string_lossy(), &y.name.to_string_lossy()),
                     order => order
@@ -127,15 +127,15 @@ impl Entry {
     pub fn time(&self) -> io::Result<OffsetDateTime> {
         let time = self.metadata.modified()?;
         let time = time.duration_since(SystemTime::UNIX_EPOCH)
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))?;
+            .map_err(io::Error::other)?;
         OffsetDateTime::from_unix_timestamp(time.as_secs() as _)
-            .map_err(|err| io::Error::new(io::ErrorKind::Other, err))
+            .map_err(io::Error::other)
 
     }
 
     #[inline]
     pub fn size(&self) -> String {
-        bytesize::to_string(self.metadata.len(), true)
+        bytesize::ByteSize::b(self.metadata.len()).display().iec().to_string()
     }
 }
 

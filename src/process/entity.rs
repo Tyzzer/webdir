@@ -5,7 +5,7 @@ use std::fs::Metadata;
 use std::str::FromStr;
 use std::cell::RefCell;
 use smallvec::SmallVec;
-use rand::{ Rng, thread_rng, distributions::Alphanumeric };
+use rand::{ RngExt, rng, distr::Alphanumeric };
 use bytes::Bytes;
 use hyper::StatusCode;
 use http::HeaderMap;
@@ -114,7 +114,7 @@ impl<'a> Entity<'a> {
 
         if let Some(ifnonematch) = map.typed_get::<headers::IfNoneMatch>() {
             if !ifnonematch.precondition_passes(&self.etag) {
-                return not_modified(format_args!("etag: {:?}", &self.etag));
+                return not_modified(format_args!("etag: {:?}", self.etag));
             }
         }
 
@@ -167,7 +167,7 @@ impl<'a> Entity<'a> {
                 map.typed_insert(headers::ContentRange::bytes(range.clone(), length).unwrap());
                 Result(StatusCode::PARTIAL_CONTENT, map, Value::Range(vec.pop().unwrap()))
             } else {
-                let boundary = thread_rng()
+                let boundary = rng()
                     .sample_iter(&Alphanumeric)
                     .map(char::from)
                     .take(12)

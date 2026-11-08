@@ -1,5 +1,6 @@
 use std::pin::Pin;
 use std::task::{ Context, Poll };
+use std::convert::Infallible;
 use tokio::sync::mpsc;
 use bytes::Bytes;
 use hyper::body::{ Body, SizeHint, Frame };
@@ -49,7 +50,7 @@ impl ResponseBody {
 
 impl Body for ResponseBody {
     type Data = Bytes;
-    type Error = !;
+    type Error = Infallible;
 
     fn poll_frame(self: Pin<&mut Self>, cx: &mut Context<'_>)
         -> Poll<Option<Result<Frame<Self::Data>, Self::Error>>>

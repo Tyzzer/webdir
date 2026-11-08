@@ -1,5 +1,3 @@
-#![feature(never_type)]
-
 #[macro_use]
 extern crate tracing;
 
@@ -12,6 +10,7 @@ mod body;
 
 use std::io;
 use std::sync::Arc;
+use std::convert::Infallible;
 use std::path::Path;
 use futures::future;
 use hyper::body::Incoming;
@@ -36,7 +35,7 @@ impl WebDir {
 
 impl Service<Request<Incoming>> for WebDir {
     type Response = Response<Body>;
-    type Error = !;
+    type Error = Infallible;
     type Future = future::Ready<Result<Response<Body>, Self::Error>>;
 
     fn call(&self, req: Request<Incoming>) -> Self::Future {

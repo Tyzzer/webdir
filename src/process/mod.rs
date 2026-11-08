@@ -170,7 +170,7 @@ impl<'a> Process<'a> {
         let range = range.unwrap_or(0..entity.length);
         let start = range.start;
         let len = range.end - range.start;
-        let (mut sender, body) = Body::channel(Some(len as u64));
+        let (mut sender, body) = Body::channel(Some(len));
 
         let fut = async move {
             let mut fd = {
