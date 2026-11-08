@@ -3,7 +3,6 @@ extern crate tracing;
 
 #[macro_use]
 mod utils;
-mod stream;
 mod process;
 mod file;
 mod body;
@@ -19,7 +18,6 @@ use hyper::{ StatusCode, Request, Response};
 use crate::body::ResponseBody as Body;
 use crate::process::Process;
 use crate::utils::err_html;
-pub use crate::stream::Stream as WebStream;
 
 #[derive(Clone)]
 pub struct WebDir {

@@ -1,18 +1,13 @@
-use std::{ fs, env };
-use std::io::Cursor;
+use std::env;
 use std::sync::Arc;
 use std::net::SocketAddr;
-use std::path::{ Path, PathBuf };
+use std::path::PathBuf;
 use argh::FromArgs;
-use anyhow::Context;
 use futures::future::TryFutureExt;
 use tokio::net::TcpListener;
-use tokio_rustls::TlsAcceptor;
-use tokio_rustls::rustls::ServerConfig;
-use tokio_rustls::rustls::pki_types::{ CertificateDer, PrivateKeyDer };
 use hyper_util::server::conn::auto::Builder as HttpBuilder;
 use tracing::{ info, error };
-use webdir::{ WebDir, WebStream };
+use webdir::WebDir;
 
 
 /// WebDir -- simple web file server
@@ -29,27 +24,6 @@ struct Options {
     /// index
     #[argh(switch, short = 'i')]
     pub index: bool,
-
-    /// enable HTTPS
-    #[argh(option)]
-    pub https: Option<PathBuf>
-}
-
-fn load_cert_and_key(path: &Path)
-    -> anyhow::Result<(Vec<CertificateDer<'static>>, PrivateKeyDer<'static>)>
-{
-    let mut reader = Cursor::new(fs::read(path)?);
-
-    let cert = rustls_pemfile::certs(&mut reader)
-        .collect::<Result<Vec<_>, _>>()
-        .context("Bad certs")?;
-
-    reader.set_position(0);
-    let key = rustls_pemfile::private_key(&mut reader)
-        .context("Bad private key")?
-        .context("not found private key")?;
-
-    Ok((cert, key))
 }
 
 
@@ -64,18 +38,6 @@ async fn main() -> anyhow::Result<()> {
     let root =
         if let Some(ref p) = options.root { Arc::from(&*p.canonicalize()?) }
         else { Arc::from(&*env::current_dir()?) };
-
-    let acceptor = if let Some(cert) = options.https.as_ref() {
-        let (certs, key) = load_cert_and_key(cert)?;
-        let mut config = ServerConfig::builder()
-            .with_no_client_auth()
-            .with_single_cert(certs, key)?;
-        config.alpn_protocols = vec!["h2".into(), "http/1.1".into()];
-        let config = Arc::new(config);
-        Some(TlsAcceptor::from(config))
-    } else {
-        None
-    };
 
     let webdir = WebDir::new(root, options.index)?;
     let listener = TcpListener::bind(&options.bind).await?;
@@ -96,7 +58,6 @@ async fn main() -> anyhow::Result<()> {
     loop {
         let result = listener.accept().await;
         let webdir = webdir.clone();
-        let acceptor = acceptor.clone();
         let http_builder = http_builder.clone();
 
         let fut = async move {
@@ -104,8 +65,7 @@ async fn main() -> anyhow::Result<()> {
 
             info!(?addr, "peer");
 
-            let stream = WebStream::new(socket, acceptor).await?;
-            let stream = hyper_util::rt::tokio::TokioIo::new(stream);
+            let stream = hyper_util::rt::tokio::TokioIo::new(socket);
 
             http_builder
                 .serve_connection(stream, webdir)
